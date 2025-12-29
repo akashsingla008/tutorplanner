@@ -1,4 +1,4 @@
-const CACHE_NAME = "tutor-planner-v6";
+const CACHE_NAME = "mindful-maths-v1";
 
 const FILES_TO_CACHE = [
   "/",
