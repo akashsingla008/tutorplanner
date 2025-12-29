@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Tutor Planner</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#4f46e5" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>
+  <h1>Tutor Planner</h1>
+  <p class="subtitle">Weekly Class Scheduler</p>
+</header>
+
+<!-- Navigation Tabs -->
+<nav class="tabs">
+  <button class="tab active" data-view="schedule">Schedule</button>
+  <button class="tab" data-view="students">Students</button>
+  <button class="tab" data-view="reports">Reports</button>
+</nav>
+
+<!-- Main Schedule View -->
+<main id="schedule-view" class="view active">
+  <div class="week-header">
+    <button id="prevWeek" class="nav-btn">◀</button>
+    <span id="weekLabel">This Week</span>
+    <button id="nextWeek" class="nav-btn">▶</button>
+    <button id="copyWeekBtn" class="copy-week-btn" title="Copy this week's schedule">Copy Week</button>
+  </div>
+
+  <div id="dragHint" class="drag-hint hidden">
+    Drag classes to move • Hold Ctrl/Cmd to copy
+  </div>
+
+  <div id="weekGrid" class="week-grid">
+    <!-- Days will be rendered here -->
+  </div>
+
+  <div id="clashWarning" class="clash-banner hidden">
+    ⚠️ Time clashes detected! Check highlighted slots.
+  </div>
+</main>
+
+<!-- Student View -->
+<main id="students-view" class="view">
+  <div class="student-selector">
+    <label for="studentSelect">Select Student:</label>
+    <select id="studentSelect">
+      <option value="">-- Choose Student --</option>
+    </select>
+  </div>
+
+  <div id="studentSchedule" class="student-schedule">
+    <p class="empty-state">Select a student to view their weekly schedule</p>
+  </div>
+</main>
+
+<!-- Reports View -->
+<main id="reports-view" class="view">
+  <div class="report-header">
+    <div class="report-period-selector">
+      <button class="period-btn active" data-period="week">This Week</button>
+      <button class="period-btn" data-period="month">This Month</button>
+      <button class="period-btn" data-period="custom">Custom</button>
+    </div>
+    <div id="customDateRange" class="custom-date-range hidden">
+      <input type="date" id="reportStartDate" />
+      <span>to</span>
+      <input type="date" id="reportEndDate" />
+      <button id="applyDateRange" class="btn btn-sm btn-primary">Apply</button>
+    </div>
+    <div id="reportPeriodLabel" class="report-period-label">This Week</div>
+  </div>
+
+  <div class="report-summary">
+    <div class="summary-card">
+      <div class="summary-value" id="totalClasses">0</div>
+      <div class="summary-label">Total Classes</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-value" id="completedClasses">0</div>
+      <div class="summary-label">Completed</div>
+    </div>
+    <div class="summary-card cancelled">
+      <div class="summary-value" id="cancelledClasses">0</div>
+      <div class="summary-label">Cancelled</div>
+    </div>
+    <div class="summary-card hours">
+      <div class="summary-value" id="totalHours">0</div>
+      <div class="summary-label">Total Hours</div>
+    </div>
+  </div>
+
+  <div class="report-table-container">
+    <h3>Classes by Student</h3>
+    <table class="report-table" id="studentReportTable">
+      <thead>
+        <tr>
+          <th>Student</th>
+          <th>Classes</th>
+          <th>Cancelled</th>
+          <th>Hours</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody id="studentReportBody">
+        <!-- Rows will be generated dynamically -->
+      </tbody>
+      <tfoot id="studentReportFooter">
+        <tr>
+          <td><strong>Total</strong></td>
+          <td id="footerClasses">0</td>
+          <td id="footerCancelled">0</td>
+          <td id="footerHours">0</td>
+          <td id="footerAmount">-</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="rate-setting">
+    <label for="hourlyRate">Hourly Rate (₹):</label>
+    <input type="number" id="hourlyRate" value="500" min="0" step="50" />
+  </div>
+</main>
+
+<!-- Add Class Button -->
+<button id="addBtn" class="fab" title="Add Class">+</button>
+
+<!-- Modal for Add/Edit Class -->
+<div id="modal" class="modal hidden">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="modalTitle">Add New Class</h2>
+      <button id="closeModal" class="close-btn">&times;</button>
+    </div>
+
+    <form id="classForm">
+      <div class="form-group">
+        <label>Student</label>
+        <div id="studentSelectWrapper" class="student-input-wrapper">
+          <select id="existingStudentSelect" class="student-select">
+            <option value="">-- Select Existing --</option>
+          </select>
+          <span class="or-divider">or</span>
+          <input type="text" id="studentName" placeholder="New student name" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="daySelect">Day</label>
+        <select id="daySelect" required>
+          <option value="">Select Day</option>
+          <option value="Monday">Monday</option>
+          <option value="Tuesday">Tuesday</option>
+          <option value="Wednesday">Wednesday</option>
+          <option value="Thursday">Thursday</option>
+          <option value="Friday">Friday</option>
+          <option value="Saturday">Saturday</option>
+          <option value="Sunday">Sunday</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Quick Time Slots</label>
+        <div id="quickSlots" class="quick-slots">
+          <button type="button" class="quick-slot" data-start="08:00" data-end="09:00">8-9 AM</button>
+          <button type="button" class="quick-slot" data-start="09:00" data-end="10:00">9-10 AM</button>
+          <button type="button" class="quick-slot" data-start="10:00" data-end="11:00">10-11 AM</button>
+          <button type="button" class="quick-slot" data-start="11:00" data-end="12:00">11-12 PM</button>
+          <button type="button" class="quick-slot" data-start="14:00" data-end="15:00">2-3 PM</button>
+          <button type="button" class="quick-slot" data-start="15:00" data-end="16:00">3-4 PM</button>
+          <button type="button" class="quick-slot" data-start="16:00" data-end="17:00">4-5 PM</button>
+          <button type="button" class="quick-slot" data-start="17:00" data-end="18:00">5-6 PM</button>
+          <button type="button" class="quick-slot" data-start="18:00" data-end="19:00">6-7 PM</button>
+          <button type="button" class="quick-slot" data-start="19:00" data-end="20:00">7-8 PM</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="startTime">Start Time</label>
+          <input type="time" id="startTime" required />
+        </div>
+        <div class="form-group">
+          <label for="endTime">End Time</label>
+          <input type="time" id="endTime" required />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Duration</label>
+        <div class="duration-buttons">
+          <button type="button" class="duration-btn" data-minutes="30">30 min</button>
+          <button type="button" class="duration-btn active" data-minutes="60">1 hr</button>
+          <button type="button" class="duration-btn" data-minutes="90">1.5 hr</button>
+          <button type="button" class="duration-btn" data-minutes="120">2 hr</button>
+        </div>
+      </div>
+
+      <div id="formClashWarning" class="form-clash hidden">
+        ⚠️ This slot clashes with another class!
+      </div>
+
+      <div id="suggestedSlots" class="suggested-slots hidden">
+        <h4>Suggested Available Slots:</h4>
+        <div id="slotsList"></div>
+      </div>
+
+      <div id="copyToDaySection" class="copy-to-day hidden">
+        <label>Copy to other days:</label>
+        <div class="day-checkboxes">
+          <label class="day-checkbox"><input type="checkbox" value="Monday" /><span>Mon</span></label>
+          <label class="day-checkbox"><input type="checkbox" value="Tuesday" /><span>Tue</span></label>
+          <label class="day-checkbox"><input type="checkbox" value="Wednesday" /><span>Wed</span></label>
+          <label class="day-checkbox"><input type="checkbox" value="Thursday" /><span>Thu</span></label>
+          <label class="day-checkbox"><input type="checkbox" value="Friday" /><span>Fri</span></label>
+          <label class="day-checkbox"><input type="checkbox" value="Saturday" /><span>Sat</span></label>
+          <label class="day-checkbox"><input type="checkbox" value="Sunday" /><span>Sun</span></label>
+        </div>
+        <button type="button" id="copyToDaysBtn" class="btn btn-secondary btn-sm">Copy to Selected Days</button>
+      </div>
+
+      <div id="cancelSection" class="cancel-section hidden">
+        <label>Cancel this class:</label>
+        <div class="cancel-options">
+          <button type="button" class="cancel-reason-btn" data-reason="student">Student Unavailable</button>
+          <button type="button" class="cancel-reason-btn" data-reason="tutor">Tutor Unavailable</button>
+          <button type="button" class="cancel-reason-btn" data-reason="holiday">Holiday</button>
+          <button type="button" class="cancel-reason-btn" data-reason="other">Other Reason</button>
+        </div>
+      </div>
+
+      <div id="restoreSection" class="restore-section hidden">
+        <p>This class was cancelled: <span id="cancelReason"></span></p>
+        <button type="button" id="restoreBtn" class="btn btn-success">Restore Class</button>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" id="deleteBtn" class="btn btn-danger hidden">Delete</button>
+        <button type="button" id="duplicateBtn" class="btn btn-secondary hidden">Duplicate</button>
+        <button type="submit" id="saveBtn" class="btn btn-primary">Save Class</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="app.js"></script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js");
+  }
+</script>
+
+</body>
+</html>
