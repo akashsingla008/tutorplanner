@@ -1318,6 +1318,16 @@ header .subtitle {
   font-weight: 500;
 }
 
+.upcoming-label {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
 /* Report row color coding */
 .report-row-confirmed {
   background: #f0fdf4; /* Light green - confirmed classes */

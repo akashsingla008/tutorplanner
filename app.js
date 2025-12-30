@@ -2092,8 +2092,10 @@ function renderReport() {
                   📩
                 </button>
               ` : ''}
-            ` : `
+            ` : hasPendingClasses ? `
               <span class="awaiting-confirm-label">Awaiting confirmation</span>
+            ` : `
+              <span class="upcoming-label">Upcoming</span>
             `}
           </td>
         </tr>
