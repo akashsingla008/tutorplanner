@@ -1978,7 +1978,7 @@ function renderEarningsChart(classesInRange, _studentStats, periodKey, isClassCo
     100 // Minimum scale
   );
 
-  // Render bars
+  // Render bars with interactive tooltips
   chartContainer.innerHTML = dayOrder.map(day => {
     const earnings = dayEarnings[day];
     const total = earnings.paid + earnings.completed + earnings.upcoming;
@@ -1991,19 +1991,108 @@ function renderEarningsChart(classesInRange, _studentStats, periodKey, isClassCo
     const dayIndex = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
     const isToday = dayIndex[day] === today.getDay();
 
+    // Build tooltip content
+    const tooltipLines = [];
+    if (earnings.paid > 0) tooltipLines.push(`Paid: ₹${earnings.paid.toLocaleString()}`);
+    if (earnings.completed > 0) tooltipLines.push(`Unpaid: ₹${earnings.completed.toLocaleString()}`);
+    if (earnings.upcoming > 0) tooltipLines.push(`Upcoming: ₹${earnings.upcoming.toLocaleString()}`);
+    const tooltipContent = tooltipLines.length > 0 ? tooltipLines.join(' | ') : 'No classes';
+
     return `
-      <div class="chart-bar-group ${isToday ? 'today' : ''}">
-        <div class="chart-bar-stack" title="₹${total.toLocaleString()}">
-          ${earnings.upcoming > 0 ? `<div class="chart-bar upcoming" style="height: ${upcomingHeight}%"></div>` : ''}
-          ${earnings.completed > 0 ? `<div class="chart-bar completed" style="height: ${completedHeight}%"></div>` : ''}
-          ${earnings.paid > 0 ? `<div class="chart-bar paid" style="height: ${paidHeight}%"></div>` : ''}
+      <div class="chart-bar-group ${isToday ? 'today' : ''}" data-day="${day}">
+        <div class="chart-bar-stack"
+             data-total="${total}"
+             data-paid="${earnings.paid}"
+             data-completed="${earnings.completed}"
+             data-upcoming="${earnings.upcoming}">
+          ${earnings.upcoming > 0 ? `<div class="chart-bar upcoming" style="height: ${upcomingHeight}%" data-amount="${earnings.upcoming}"></div>` : ''}
+          ${earnings.completed > 0 ? `<div class="chart-bar completed" style="height: ${completedHeight}%" data-amount="${earnings.completed}"></div>` : ''}
+          ${earnings.paid > 0 ? `<div class="chart-bar paid" style="height: ${paidHeight}%" data-amount="${earnings.paid}"></div>` : ''}
           ${total === 0 ? '<div class="chart-bar empty"></div>' : ''}
         </div>
+        <div class="chart-tooltip">${tooltipContent}</div>
         <div class="chart-bar-label">${day.substring(0, 3)}</div>
         <div class="chart-bar-amount">${total > 0 ? `₹${total.toLocaleString()}` : '-'}</div>
       </div>
     `;
   }).join('');
+
+  // Add click handlers for chart bars
+  chartContainer.querySelectorAll('.chart-bar-group').forEach(group => {
+    group.addEventListener('click', () => {
+      const day = group.dataset.day;
+      const stack = group.querySelector('.chart-bar-stack');
+      const paid = parseInt(stack.dataset.paid) || 0;
+      const completed = parseInt(stack.dataset.completed) || 0;
+      const upcoming = parseInt(stack.dataset.upcoming) || 0;
+      const total = paid + completed + upcoming;
+
+      if (total > 0) {
+        showChartDayDetails(day, paid, completed, upcoming, classesInRange, isClassCompleted, periodKey);
+      }
+    });
+  });
+}
+
+// Show detailed breakdown for a day when clicked
+function showChartDayDetails(day, paid, completed, upcoming, classesInRange, isClassCompleted, periodKey) {
+  const dayClasses = classesInRange.filter(c => c.day === day && !c.cancelled);
+
+  let detailsHtml = `<div class="chart-details-popup">
+    <div class="chart-details-header">
+      <h4>${day}</h4>
+      <button class="chart-details-close" onclick="this.closest('.chart-details-popup').remove()">&times;</button>
+    </div>
+    <div class="chart-details-summary">
+      ${paid > 0 ? `<span class="detail-paid">Paid: ₹${paid.toLocaleString()}</span>` : ''}
+      ${completed > 0 ? `<span class="detail-completed">Unpaid: ₹${completed.toLocaleString()}</span>` : ''}
+      ${upcoming > 0 ? `<span class="detail-upcoming">Upcoming: ₹${upcoming.toLocaleString()}</span>` : ''}
+    </div>
+    <div class="chart-details-classes">`;
+
+  dayClasses.sort((a, b) => a.start.localeCompare(b.start)).forEach(cls => {
+    const rate = studentRates[cls.student] || defaultRate;
+    const minutes = getMinutesBetween(cls.start, cls.end);
+    const amount = Math.round((minutes / 60) * rate);
+
+    let status = 'upcoming';
+    let statusLabel = 'Upcoming';
+    if (cls.pendingConfirmation) {
+      status = 'pending';
+      statusLabel = 'Awaiting';
+    } else if (isClassCompleted(cls)) {
+      const paymentKey = `${cls.student}_${periodKey}`;
+      if (paymentStatus[paymentKey]) {
+        status = 'paid';
+        statusLabel = 'Paid';
+      } else {
+        status = 'completed';
+        statusLabel = 'Unpaid';
+      }
+    }
+
+    detailsHtml += `
+      <div class="chart-class-item ${status}">
+        <div class="chart-class-info">
+          <span class="chart-class-student">${escapeHtml(cls.student)}</span>
+          <span class="chart-class-time">${formatTime(cls.start)} - ${formatTime(cls.end)}</span>
+        </div>
+        <div class="chart-class-amount">
+          <span class="chart-class-status ${status}">${statusLabel}</span>
+          <span>₹${amount.toLocaleString()}</span>
+        </div>
+      </div>`;
+  });
+
+  detailsHtml += `</div></div>`;
+
+  // Remove any existing popup
+  const existingPopup = document.querySelector('.chart-details-popup');
+  if (existingPopup) existingPopup.remove();
+
+  // Add new popup
+  const chartContainer = document.querySelector('.earnings-chart-container');
+  chartContainer.insertAdjacentHTML('beforeend', detailsHtml);
 }
 
 // Send payment reminder
