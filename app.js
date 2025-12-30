@@ -1556,10 +1556,11 @@ Just a gentle reminder about ${student}'s tuition fees:
 📅 ${period}
 💰 ₹${parseInt(amount).toLocaleString()}
 
-No rush - whenever convenient! Let me know if you have any questions.
+Let me know if you have any questions.
 
 Thanks! 😊
-- Mahak, Mindful Maths`;
+- Mahak, 
+Mindful Maths by Mahak`;
 
   // Check if Web Share API is available (mostly on mobile)
   if (navigator.share) {
