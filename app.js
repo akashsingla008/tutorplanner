@@ -39,6 +39,8 @@ const copyToDaySection = document.getElementById("copyToDaySection");
 const cancelSection = document.getElementById("cancelSection");
 const restoreSection = document.getElementById("restoreSection");
 const cancelReasonSpan = document.getElementById("cancelReason");
+const pendingConfirmSection = document.getElementById("pendingConfirmSection");
+const checkWithStudentBtn = document.getElementById("checkWithStudentBtn");
 
 // Cancel reason labels
 const CANCEL_REASONS = {
@@ -111,6 +113,15 @@ function setupEventListeners() {
 
   // Allow Clash button
   document.getElementById("allowClashBtn").addEventListener("click", handleAllowClash);
+
+  // Check with Student button
+  checkWithStudentBtn.addEventListener("click", handleCheckWithStudent);
+
+  // Confirm Class button (after student confirms)
+  document.getElementById("confirmClassBtn").addEventListener("click", handleConfirmClass);
+
+  // Resend WhatsApp button
+  document.getElementById("resendWhatsAppBtn").addEventListener("click", handleResendWhatsApp);
 
   // Real-time clash detection in form
   [daySelect, startTimeInput, endTimeInput].forEach(input => {
@@ -462,12 +473,13 @@ function renderWeekGrid() {
                 const globalIndex = classes.indexOf(c);
                 const hasClash = clashingIndices.includes(i);
                 const isCancelled = c.cancelled;
+                const isPending = c.pendingConfirmation;
                 const cancelLabel = isCancelled ? CANCEL_REASONS[c.cancelReason] || 'Cancelled' : '';
                 const isSelected = selectedClasses.has(globalIndex);
                 return `
-                  <div class="class-card ${hasClash ? 'clash' : ''} ${isCancelled ? 'cancelled' : ''} ${isSelected ? 'selected' : ''}"
+                  <div class="class-card ${hasClash ? 'clash' : ''} ${isCancelled ? 'cancelled' : ''} ${isPending ? 'pending' : ''} ${isSelected ? 'selected' : ''}"
                        data-index="${globalIndex}"
-                       draggable="${!isCancelled && !isSelectMode}">
+                       draggable="${!isCancelled && !isPending && !isSelectMode}">
                     ${isSelectMode ? `
                       <label class="select-checkbox">
                         <input type="checkbox" class="class-select-cb" data-index="${globalIndex}" ${isSelected ? 'checked' : ''} />
@@ -477,8 +489,9 @@ function renderWeekGrid() {
                       <div class="student-name">${escapeHtml(c.student)}</div>
                       <div class="class-time">${formatTime(c.start)} - ${formatTime(c.end)}</div>
                       ${isCancelled ? `<div class="cancel-badge">${cancelLabel}</div>` : ''}
+                      ${isPending ? `<div class="pending-badge">⏳ Awaiting confirmation</div>` : ''}
                     </div>
-                    ${!isCancelled && !isSelectMode ? `<button class="copy-class-btn" data-index="${globalIndex}" title="Copy to another day">⧉</button>` : ''}
+                    ${!isCancelled && !isPending && !isSelectMode ? `<button class="copy-class-btn" data-index="${globalIndex}" title="Copy to another day">⧉</button>` : ''}
                   </div>
                 `;
               }).join("")
@@ -778,6 +791,9 @@ function openAddModal() {
   resetFormUI();
   updateStudentDropdowns();
 
+  // Show Check with Student button for new classes
+  checkWithStudentBtn.classList.remove("hidden");
+
   modal.classList.remove("hidden");
   existingStudentSelect.focus();
 }
@@ -796,10 +812,21 @@ function openEditModal(index) {
     restoreSection.classList.remove("hidden");
     cancelReasonSpan.textContent = CANCEL_REASONS[cls.cancelReason] || 'Unknown';
     copyToDaySection.classList.add("hidden");
+    pendingConfirmSection.classList.add("hidden");
+    checkWithStudentBtn.classList.add("hidden");
+  } else if (cls.pendingConfirmation) {
+    // Show pending confirmation UI
+    cancelSection.classList.add("hidden");
+    restoreSection.classList.add("hidden");
+    copyToDaySection.classList.add("hidden");
+    pendingConfirmSection.classList.remove("hidden");
+    checkWithStudentBtn.classList.add("hidden");
   } else {
     cancelSection.classList.remove("hidden");
     restoreSection.classList.add("hidden");
     copyToDaySection.classList.remove("hidden");
+    pendingConfirmSection.classList.add("hidden");
+    checkWithStudentBtn.classList.remove("hidden"); // Show for confirmed classes to resend
   }
 
   // Set student - check if exists in dropdown
@@ -857,6 +884,8 @@ function resetFormUI() {
   copyToDaySection.classList.add("hidden");
   cancelSection.classList.add("hidden");
   restoreSection.classList.add("hidden");
+  pendingConfirmSection.classList.add("hidden");
+  checkWithStudentBtn.classList.add("hidden");
   allowClashOverride = false; // Reset clash override flag
 
   // Reset duration to default
@@ -1035,6 +1064,133 @@ function handleAllowClash() {
 
   // Trigger form submit
   classForm.dispatchEvent(new Event('submit', { cancelable: true }));
+}
+
+// Handle Check with Student - saves class as pending and sends WhatsApp
+function handleCheckWithStudent() {
+  // Get student name from either dropdown or text input
+  const studentName = existingStudentSelect.value || studentNameInput.value.trim();
+
+  if (!studentName) {
+    alert("Please select or enter a student name");
+    return;
+  }
+
+  const day = daySelect.value;
+  const start = startTimeInput.value;
+  const end = endTimeInput.value;
+
+  if (!day || !start || !end) {
+    alert("Please fill in all fields");
+    return;
+  }
+
+  if (end <= start) {
+    alert("End time must be after start time");
+    return;
+  }
+
+  const cls = {
+    student: studentName,
+    day: day,
+    start: start,
+    end: end,
+    pendingConfirmation: true,
+    pendingSince: new Date().toISOString()
+  };
+
+  // Check for clashes
+  if (hasClash(cls, editingIndex) && !allowClashOverride) {
+    formClashWarning.classList.remove("hidden");
+    showSuggestedSlots(cls.day);
+    return;
+  }
+
+  if (editingIndex !== null) {
+    classes[editingIndex] = { ...classes[editingIndex], ...cls };
+  } else {
+    classes.push(cls);
+  }
+
+  saveClasses();
+
+  // Send WhatsApp message
+  sendWhatsAppConfirmation(cls);
+
+  closeModal();
+  renderWeekGrid();
+  updateStudentDropdowns();
+  showToast("WhatsApp opened - awaiting student confirmation");
+}
+
+// Send WhatsApp confirmation message
+function sendWhatsAppConfirmation(cls) {
+  const dayName = cls.day;
+  const startTime = formatTime(cls.start);
+  const endTime = formatTime(cls.end);
+
+  // Get next occurrence of this day
+  const nextDate = getNextDayDate(cls.day);
+  const dateStr = nextDate.toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short'
+  });
+
+  const message = `Hi! 📚
+
+I'd like to schedule a class with you:
+
+📅 *${dateStr}*
+⏰ *${startTime} - ${endTime}*
+
+Please confirm if this time works for you.
+
+Thanks!
+- Mahak (Mindful Maths)`;
+
+  // Open WhatsApp with the message
+  const encodedMessage = encodeURIComponent(message);
+  const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+  window.open(whatsappUrl, '_blank');
+}
+
+// Get the next occurrence of a day
+function getNextDayDate(dayName) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const today = new Date();
+  const todayDay = today.getDay();
+  const targetDay = days.indexOf(dayName);
+
+  let daysUntil = targetDay - todayDay;
+  if (daysUntil <= 0) daysUntil += 7; // Next week if today or past
+
+  const nextDate = new Date(today);
+  nextDate.setDate(today.getDate() + daysUntil);
+  return nextDate;
+}
+
+// Handle student confirmation
+function handleConfirmClass() {
+  if (editingIndex === null) return;
+
+  const cls = classes[editingIndex];
+  delete cls.pendingConfirmation;
+  delete cls.pendingSince;
+
+  saveClasses();
+  closeModal();
+  renderWeekGrid();
+  showToast("Class confirmed! ✓");
+}
+
+// Handle resend WhatsApp
+function handleResendWhatsApp() {
+  if (editingIndex === null) return;
+
+  const cls = classes[editingIndex];
+  sendWhatsAppConfirmation(cls);
+  showToast("WhatsApp opened");
 }
 
 function handleDelete() {

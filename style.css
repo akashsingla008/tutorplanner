@@ -1027,6 +1027,82 @@ header .subtitle {
   display: none;
 }
 
+/* Pending Confirmation Style */
+.class-card.pending {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-left-color: #f59e0b;
+  opacity: 0.9;
+}
+
+.class-card.pending .student-name {
+  color: #92400e;
+}
+
+.class-card.pending .class-time {
+  color: #b45309;
+}
+
+.pending-badge {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.class-card:not(.pending) .pending-badge {
+  display: none;
+}
+
+/* Pending Confirm Section in Modal */
+.pending-confirm-section {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.pending-confirm-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.pending-icon {
+  font-size: 1.5rem;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.pending-confirm-section .btn {
+  margin: 4px;
+}
+
+/* WhatsApp Button */
+.btn-whatsapp {
+  background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
+  color: white;
+  border: none;
+}
+
+.btn-whatsapp:hover {
+  background: linear-gradient(135deg, #22c55e 0%, #0f766e 100%);
+  box-shadow: 0 2px 8px rgba(37, 211, 102, 0.4);
+}
+
 /* Reports View */
 .report-header {
   background: white;

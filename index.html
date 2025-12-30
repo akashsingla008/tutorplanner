@@ -283,9 +283,19 @@
         <button type="button" id="restoreBtn" class="btn btn-success">Restore Class</button>
       </div>
 
+      <div id="pendingConfirmSection" class="pending-confirm-section hidden">
+        <div class="pending-confirm-status">
+          <span class="pending-icon">⏳</span>
+          <span>Awaiting student confirmation</span>
+        </div>
+        <button type="button" id="confirmClassBtn" class="btn btn-success">Student Confirmed</button>
+        <button type="button" id="resendWhatsAppBtn" class="btn btn-secondary btn-sm">Resend WhatsApp</button>
+      </div>
+
       <div class="form-actions">
         <button type="button" id="deleteBtn" class="btn btn-danger hidden">Delete</button>
         <button type="button" id="duplicateBtn" class="btn btn-secondary hidden">Duplicate</button>
+        <button type="button" id="checkWithStudentBtn" class="btn btn-whatsapp hidden">Check with Student</button>
         <button type="submit" id="saveBtn" class="btn btn-primary">Save Class</button>
       </div>
     </form>
