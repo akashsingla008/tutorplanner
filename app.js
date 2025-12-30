@@ -1550,20 +1550,16 @@ function renderReport() {
 
 // Send payment reminder
 function sendPaymentReminder(student, amount, period) {
-  const message = `Hello! 🙏
+  const message = `Hi! 🙏 Hope you're doing well!
 
-Hope you and your family are doing well! I wanted to gently follow up regarding ${student}'s tuition fees for the recent classes.
+Just a gentle reminder about ${student}'s tuition fees:
+📅 ${period}
+💰 ₹${parseInt(amount).toLocaleString()}
 
-📅 Period: ${period}
-💰 Amount: ₹${parseInt(amount).toLocaleString()}
+No rush - whenever convenient! Let me know if you have any questions.
 
-I completely understand that sometimes things get busy, so no rush at all! Whenever it's convenient for you, please let me know if you have any questions or if you'd like to discuss anything.
-
-Thank you so much for your continued support and trust in Mindful Maths! It's truly a pleasure teaching ${student}. 😊
-
-Warm regards,
-Mahak
-Mindful Maths`;
+Thanks! 😊
+- Mahak, Mindful Maths`;
 
   // Check if Web Share API is available (mostly on mobile)
   if (navigator.share) {
