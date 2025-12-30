@@ -1609,12 +1609,13 @@ function renderReport() {
   // Calculate totals
   let totalClasses = classesInRange.length;
   let cancelledCount = classesInRange.filter(c => c.cancelled).length;
-  let completedCount = totalClasses - cancelledCount;
+  let pendingCount = classesInRange.filter(c => c.pendingConfirmation).length;
+  let completedCount = totalClasses - cancelledCount - pendingCount;
   let totalMinutes = 0;
 
-  // Calculate hours for non-cancelled classes
+  // Calculate hours for confirmed (non-cancelled, non-pending) classes only
   classesInRange.forEach(c => {
-    if (!c.cancelled) {
+    if (!c.cancelled && !c.pendingConfirmation) {
       totalMinutes += getMinutesBetween(c.start, c.end);
     }
   });
@@ -1634,13 +1635,17 @@ function renderReport() {
       studentStats[c.student] = {
         total: 0,
         cancelled: 0,
+        pending: 0,
         minutes: 0
       };
     }
     studentStats[c.student].total++;
     if (c.cancelled) {
       studentStats[c.student].cancelled++;
+    } else if (c.pendingConfirmation) {
+      studentStats[c.student].pending++;
     } else {
+      // Only count confirmed classes for hours/payment
       studentStats[c.student].minutes += getMinutesBetween(c.start, c.end);
     }
   });
@@ -1657,6 +1662,7 @@ function renderReport() {
   } else {
     tbody.innerHTML = students.map(student => {
       const stats = studentStats[student];
+      const confirmedClasses = stats.total - stats.cancelled - stats.pending;
       const hours = (stats.minutes / 60).toFixed(1);
       const rate = studentRates[student] || defaultRate;
       const amount = Math.round((stats.minutes / 60) * rate);
@@ -1667,10 +1673,17 @@ function renderReport() {
       const isPaid = paymentStatus[paymentKey] || false;
       if (isPaid) paidAmount += amount;
 
+      // Only allow payment tracking for confirmed classes (not pending)
+      const hasConfirmedClasses = confirmedClasses > 0;
+      const hasPendingClasses = stats.pending > 0;
+
       return `
-        <tr class="${isPaid ? 'payment-cleared' : 'payment-pending'}">
-          <td><strong>${escapeHtml(student)}</strong></td>
-          <td>${stats.total - stats.cancelled}</td>
+        <tr class="${isPaid && hasConfirmedClasses ? 'payment-cleared' : 'payment-pending'}">
+          <td>
+            <strong>${escapeHtml(student)}</strong>
+            ${hasPendingClasses ? `<span class="student-pending-badge">${stats.pending} awaiting</span>` : ''}
+          </td>
+          <td>${confirmedClasses}${hasPendingClasses ? ` <span class="pending-count">(+${stats.pending})</span>` : ''}</td>
           <td class="cancelled-count">${stats.cancelled > 0 ? stats.cancelled : '-'}</td>
           <td>${hours}</td>
           <td>
@@ -1679,20 +1692,24 @@ function renderReport() {
                    value="${rate}"
                    min="0" step="50" />
           </td>
-          <td class="amount">₹${amount.toLocaleString()}</td>
+          <td class="amount">${hasConfirmedClasses ? `₹${amount.toLocaleString()}` : '-'}</td>
           <td class="payment-cell">
-            <label class="payment-checkbox">
-              <input type="checkbox" class="payment-toggle"
-                     data-student="${escapeHtml(student)}"
-                     data-period="${periodKey}"
-                     ${isPaid ? 'checked' : ''} />
-              <span class="payment-label">${isPaid ? 'Paid' : 'Pending'}</span>
-            </label>
-            ${!isPaid && amount > 0 ? `
-              <button class="reminder-btn" data-student="${escapeHtml(student)}" data-amount="${amount}" data-classes="${stats.total - stats.cancelled}" data-hours="${hours}" title="Send payment reminder">
-                📩
-              </button>
-            ` : ''}
+            ${hasConfirmedClasses ? `
+              <label class="payment-checkbox">
+                <input type="checkbox" class="payment-toggle"
+                       data-student="${escapeHtml(student)}"
+                       data-period="${periodKey}"
+                       ${isPaid ? 'checked' : ''} />
+                <span class="payment-label">${isPaid ? 'Paid' : 'Pending'}</span>
+              </label>
+              ${!isPaid && amount > 0 ? `
+                <button class="reminder-btn" data-student="${escapeHtml(student)}" data-amount="${amount}" data-classes="${confirmedClasses}" data-hours="${hours}" title="Send payment reminder">
+                  📩
+                </button>
+              ` : ''}
+            ` : `
+              <span class="awaiting-confirm-label">Awaiting confirmation</span>
+            `}
           </td>
         </tr>
       `;
