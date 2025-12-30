@@ -4,9 +4,15 @@ function safeJsonParse(key, defaultValue) {
     const item = localStorage.getItem(key);
     if (item === null) return defaultValue;
     const parsed = JSON.parse(item);
-    // Validate expected type
-    if (Array.isArray(defaultValue) && !Array.isArray(parsed)) return defaultValue;
-    if (typeof defaultValue === 'object' && defaultValue !== null && (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))) return defaultValue;
+    // Validate expected type - only return default if type mismatch
+    if (Array.isArray(defaultValue)) {
+      // Default is array, parsed must also be array
+      return Array.isArray(parsed) ? parsed : defaultValue;
+    }
+    if (typeof defaultValue === 'object' && defaultValue !== null) {
+      // Default is plain object, parsed must be plain object (not array, not null)
+      return (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) ? parsed : defaultValue;
+    }
     return parsed;
   } catch (e) {
     console.error(`Error parsing localStorage key "${key}":`, e);
@@ -76,6 +82,8 @@ const endTimeInput = document.getElementById("endTime");
 document.addEventListener("DOMContentLoaded", init);
 
 function init() {
+  // Check if data was lost and auto-recover from backup
+  checkAndRecoverData();
   migrateClassesToDateFormat();
   cleanupOldClasses();
   renderWeekGrid();
@@ -85,6 +93,52 @@ function init() {
   checkAndCreateBackup();
   initNotifications();
   startClassReminderCheck();
+}
+
+// Auto-recover data if classes array is empty but backups exist
+function checkAndRecoverData() {
+  if (classes.length > 0) return; // Data exists, no recovery needed
+
+  // Try to recover from auto backups first
+  const autoBackups = safeJsonParse('autoBackups', []);
+  if (autoBackups.length > 0 && autoBackups[0].classes && autoBackups[0].classes.length > 0) {
+    console.log('Auto-recovering data from backup...');
+    const backup = autoBackups[0];
+    classes = backup.classes;
+    studentRates = backup.studentRates || studentRates;
+    paymentStatus = backup.paymentStatus || paymentStatus;
+    defaultRate = backup.defaultRate || defaultRate;
+
+    // Save recovered data
+    saveClasses();
+    localStorage.setItem('studentRates', JSON.stringify(studentRates));
+    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    localStorage.setItem('defaultRate', defaultRate);
+
+    console.log(`Recovered ${classes.length} classes from auto backup`);
+    showToast(`Recovered ${classes.length} classes from backup!`);
+    return;
+  }
+
+  // Try cleanup backups if no auto backups
+  const cleanupBackups = safeJsonParse('cleanupBackups', []);
+  if (cleanupBackups.length > 0 && cleanupBackups[0].allClasses && cleanupBackups[0].allClasses.length > 0) {
+    console.log('Auto-recovering data from cleanup backup...');
+    const backup = cleanupBackups[0];
+    classes = backup.allClasses;
+    studentRates = backup.studentRates || studentRates;
+    paymentStatus = backup.paymentStatus || paymentStatus;
+    defaultRate = backup.defaultRate || defaultRate;
+
+    // Save recovered data
+    saveClasses();
+    localStorage.setItem('studentRates', JSON.stringify(studentRates));
+    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    localStorage.setItem('defaultRate', defaultRate);
+
+    console.log(`Recovered ${classes.length} classes from cleanup backup`);
+    showToast(`Recovered ${classes.length} classes from backup!`);
+  }
 }
 
 // Migrate existing classes to include date field
