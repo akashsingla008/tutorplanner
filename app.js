@@ -1,5 +1,20 @@
-// State
-let classes = JSON.parse(localStorage.getItem("classes")) || [];
+// State - use safe JSON parsing to prevent crashes from corrupted localStorage
+function safeJsonParse(key, defaultValue) {
+  try {
+    const item = localStorage.getItem(key);
+    if (item === null) return defaultValue;
+    const parsed = JSON.parse(item);
+    // Validate expected type
+    if (Array.isArray(defaultValue) && !Array.isArray(parsed)) return defaultValue;
+    if (typeof defaultValue === 'object' && defaultValue !== null && (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))) return defaultValue;
+    return parsed;
+  } catch (e) {
+    console.error(`Error parsing localStorage key "${key}":`, e);
+    return defaultValue;
+  }
+}
+
+let classes = safeJsonParse("classes", []);
 let editingIndex = null;
 let currentWeekOffset = 0;
 let selectedDuration = 60; // Default 1 hour
@@ -9,8 +24,8 @@ let reportPeriod = 'week';
 let customStartDate = null;
 let customEndDate = null;
 let defaultRate = parseInt(localStorage.getItem('defaultRate')) || 500;
-let studentRates = JSON.parse(localStorage.getItem('studentRates')) || {};
-let paymentStatus = JSON.parse(localStorage.getItem('paymentStatus')) || {};
+let studentRates = safeJsonParse('studentRates', {});
+let paymentStatus = safeJsonParse('paymentStatus', {});
 let isSelectMode = false;
 let selectedClasses = new Set();
 let allowClashOverride = false; // Flag to allow saving despite clash
@@ -123,7 +138,7 @@ function cleanupOldClasses() {
   };
 
   // Store cleanup backup separately
-  let cleanupBackups = JSON.parse(localStorage.getItem('cleanupBackups')) || [];
+  let cleanupBackups = safeJsonParse('cleanupBackups', []);
   cleanupBackups.unshift(cleanupBackup);
   // Keep only last 6 cleanup backups (covering 18 months of history)
   cleanupBackups = cleanupBackups.slice(0, 6);
@@ -343,6 +358,16 @@ function setupEventListeners() {
 
   // Event delegation for suggested slot chips - prevents duplicate listeners
   initSlotChipsEventDelegation();
+
+  // Select mode button event listeners (CSP-compliant - no inline onclick)
+  document.getElementById("selectModeBtn").addEventListener("click", enterSelectMode);
+  document.getElementById("selectCancelBtn").addEventListener("click", exitSelectMode);
+  document.getElementById("selectAllBtn").addEventListener("click", selectAllClasses);
+  document.getElementById("deleteSelectedBtn").addEventListener("click", deleteSelectedClasses);
+
+  // Header button event listeners (CSP-compliant - no inline onclick)
+  document.getElementById("notificationBtn").addEventListener("click", toggleNotifications);
+  document.getElementById("backupBtn").addEventListener("click", showBackupDialog);
 }
 
 // Handle clicks on week grid using event delegation
@@ -564,7 +589,15 @@ function copyMondayToWeekdays() {
 
 // Copy single class to another day (mobile-friendly)
 function showCopyClassDialog(classIndex) {
+  // Validate index bounds
+  if (classIndex < 0 || classIndex >= classes.length) {
+    console.error('showCopyClassDialog: Invalid class index', classIndex);
+    return;
+  }
+
   const cls = classes[classIndex];
+  if (!cls) return;
+
   const currentDay = cls.day;
 
   // Build options for available days
@@ -760,12 +793,6 @@ function selectAllClasses() {
   });
   renderWeekGrid();
 }
-
-// Select mode button event listeners (CSP-compliant - no inline onclick)
-document.getElementById("selectModeBtn").addEventListener("click", enterSelectMode);
-document.getElementById("selectCancelBtn").addEventListener("click", exitSelectMode);
-document.getElementById("selectAllBtn").addEventListener("click", selectAllClasses);
-document.getElementById("deleteSelectedBtn").addEventListener("click", deleteSelectedClasses);
 
 // Drag and Drop Handlers
 function handleDragStart(e) {
@@ -992,8 +1019,16 @@ function openAddModal() {
 }
 
 function openEditModal(index) {
-  editingIndex = index;
+  // Validate index bounds
+  if (index < 0 || index >= classes.length) {
+    console.error('openEditModal: Invalid class index', index);
+    return;
+  }
+
   const cls = classes[index];
+  if (!cls) return;
+
+  editingIndex = index;
 
   modalTitle.textContent = "Edit Class";
   deleteBtn.classList.remove("hidden");
@@ -2353,7 +2388,7 @@ function createAutoBackup() {
   };
 
   // Get existing backups
-  let backups = JSON.parse(localStorage.getItem('autoBackups')) || [];
+  let backups = safeJsonParse('autoBackups', []);
 
   // Add new backup
   backups.unshift(backupData);
@@ -2445,15 +2480,15 @@ function importData(file) {
 
 // Show backup/restore dialog
 function showBackupDialog() {
-  const backups = JSON.parse(localStorage.getItem('autoBackups')) || [];
+  const backups = safeJsonParse('autoBackups', []);
 
   let backupListHtml = '';
   if (backups.length > 0) {
     backupListHtml = backups.map((backup, index) => {
       const date = new Date(backup.timestamp);
-      return `<button class="backup-item" onclick="restoreAutoBackup(${index})">
+      return `<button class="backup-item" data-backup-index="${index}">
         ${date.toLocaleDateString()} ${date.toLocaleTimeString()}
-        (${backup.classes.length} classes)
+        (${backup.classes ? backup.classes.length : 0} classes)
       </button>`;
     }).join('');
   } else {
@@ -2467,24 +2502,24 @@ function showBackupDialog() {
       <div class="backup-section">
         <h4>Export Data</h4>
         <p>Download a backup file to your device</p>
-        <button class="btn btn-primary" onclick="exportData()">Download Backup</button>
+        <button class="btn btn-primary" id="exportDataBtn">Download Backup</button>
       </div>
 
       <div class="backup-section">
         <h4>Import Data</h4>
         <p>Restore from a backup file</p>
-        <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)" />
-        <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">Choose Backup File</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" />
+        <button class="btn btn-secondary" id="chooseFileBtn">Choose Backup File</button>
       </div>
 
       <div class="backup-section">
         <h4>Auto Backups (Last 4 weeks)</h4>
-        <div class="backup-list">
+        <div class="backup-list" id="backupList">
           ${backupListHtml}
         </div>
       </div>
 
-      <button class="btn btn-secondary" onclick="closeBackupDialog()" style="margin-top: 16px;">Close</button>
+      <button class="btn btn-secondary" id="closeBackupBtn" style="margin-top: 16px;">Close</button>
     </div>
   `;
 
@@ -2497,6 +2532,22 @@ function showBackupDialog() {
     if (e.target === dialog) closeBackupDialog();
   });
   document.body.appendChild(dialog);
+
+  // Add event listeners (CSP-compliant - no inline onclick)
+  document.getElementById('exportDataBtn').addEventListener('click', exportData);
+  document.getElementById('chooseFileBtn').addEventListener('click', () => {
+    document.getElementById('importFile').click();
+  });
+  document.getElementById('importFile').addEventListener('change', handleImportFile);
+  document.getElementById('closeBackupBtn').addEventListener('click', closeBackupDialog);
+
+  // Event delegation for backup items
+  document.getElementById('backupList').addEventListener('click', (e) => {
+    const backupItem = e.target.closest('.backup-item');
+    if (backupItem && backupItem.dataset.backupIndex !== undefined) {
+      restoreAutoBackup(parseInt(backupItem.dataset.backupIndex));
+    }
+  });
 }
 
 function closeBackupDialog() {
@@ -2514,9 +2565,15 @@ function handleImportFile(event) {
 
 // Restore from auto backup
 function restoreAutoBackup(index) {
-  const backups = JSON.parse(localStorage.getItem('autoBackups')) || [];
-  const backup = backups[index];
+  const backups = safeJsonParse('autoBackups', []);
 
+  // Validate index bounds
+  if (index < 0 || index >= backups.length) {
+    showToast('Error: Invalid backup selection');
+    return;
+  }
+
+  const backup = backups[index];
   if (!backup) return;
 
   const date = new Date(backup.timestamp);
@@ -2531,6 +2588,9 @@ function restoreAutoBackup(index) {
     localStorage.setItem('studentRates', JSON.stringify(studentRates));
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('defaultRate', defaultRate);
+
+    // Migrate imported classes to include date field if missing
+    migrateClassesToDateFormat();
 
     // Refresh UI
     renderWeekGrid();
@@ -2778,8 +2838,13 @@ function showReminderToast(title, message) {
       <div class="reminder-toast-title">${escapeHtml(title)}</div>
       <div class="reminder-toast-message">${escapeHtml(message)}</div>
     </div>
-    <button class="reminder-toast-close" onclick="this.parentElement.remove()">✕</button>
+    <button class="reminder-toast-close">✕</button>
   `;
+
+  // Add event listener for close button (CSP-compliant)
+  toast.querySelector('.reminder-toast-close').addEventListener('click', () => {
+    toast.remove();
+  });
 
   // Add to container (create if doesn't exist)
   let container = document.getElementById('toastContainer');
@@ -2888,9 +2953,15 @@ function showInAppAlert(title, message) {
     <div class="in-app-alert-content">
       <div class="in-app-alert-title">${escapeHtml(title)}</div>
       <div class="in-app-alert-message">${escapeHtml(message)}</div>
-      <button class="in-app-alert-close" onclick="this.parentElement.parentElement.remove()">OK</button>
+      <button class="in-app-alert-close">OK</button>
     </div>
   `;
+
+  // Add event listener for close button (CSP-compliant)
+  alert.querySelector('.in-app-alert-close').addEventListener('click', () => {
+    alert.remove();
+  });
+
   document.body.appendChild(alert);
 
   // Auto-close after 10 seconds
@@ -2912,7 +2983,3 @@ function updateNotificationButton() {
     }
   }
 }
-
-// Header button event listeners (CSP-compliant - no inline onclick)
-document.getElementById("notificationBtn").addEventListener("click", toggleNotifications);
-document.getElementById("backupBtn").addEventListener("click", showBackupDialog);
