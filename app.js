@@ -226,7 +226,23 @@ function setupEventListeners() {
   // Default rate change
   document.getElementById("defaultRate").value = defaultRate;
   document.getElementById("defaultRate").addEventListener("change", (e) => {
-    defaultRate = parseInt(e.target.value) || 0;
+    let newRate = parseInt(e.target.value);
+
+    // Validate rate - must be non-negative
+    if (isNaN(newRate) || newRate < 0) {
+      newRate = 0;
+      e.target.value = 0;
+      showToast('Rate must be a positive number');
+    }
+
+    // Cap at reasonable maximum (100000)
+    if (newRate > 100000) {
+      newRate = 100000;
+      e.target.value = 100000;
+      showToast('Rate capped at maximum value');
+    }
+
+    defaultRate = newRate;
     localStorage.setItem('defaultRate', defaultRate);
     renderReport();
   });
@@ -249,6 +265,57 @@ function setupEventListeners() {
       });
     }
   });
+
+  // Event delegation for weekGrid - prevents memory leaks from repeated listener attachment
+  weekGrid.addEventListener("click", handleWeekGridClick);
+  weekGrid.addEventListener("dragstart", handleDragStart);
+  weekGrid.addEventListener("dragend", handleDragEnd);
+  weekGrid.addEventListener("dragover", handleDragOver);
+  weekGrid.addEventListener("dragleave", handleDragLeave);
+  weekGrid.addEventListener("drop", handleDrop);
+  weekGrid.addEventListener("change", handleWeekGridChange);
+
+  // Event delegation for suggested slot chips - prevents duplicate listeners
+  initSlotChipsEventDelegation();
+}
+
+// Handle clicks on week grid using event delegation
+function handleWeekGridClick(e) {
+  const card = e.target.closest(".class-card");
+  const copyBtn = e.target.closest(".copy-class-btn");
+
+  // Handle copy button click
+  if (copyBtn) {
+    e.stopPropagation();
+    showCopyClassDialog(parseInt(copyBtn.dataset.index));
+    return;
+  }
+
+  // Handle class card click
+  if (card) {
+    // Handle select mode
+    if (isSelectMode) {
+      if (!e.target.classList.contains("class-select-cb")) {
+        const index = parseInt(card.dataset.index);
+        toggleClassSelection(index);
+      }
+      return;
+    }
+    // Don't open modal if we just finished dragging
+    if (card.classList.contains("dragging")) {
+      return;
+    }
+    openEditModal(parseInt(card.dataset.index));
+  }
+}
+
+// Handle checkbox changes in week grid using event delegation
+function handleWeekGridChange(e) {
+  if (e.target.classList.contains("class-select-cb")) {
+    e.stopPropagation();
+    const index = parseInt(e.target.dataset.index);
+    toggleClassSelection(index);
+  }
 }
 
 // View Switching
@@ -499,52 +566,8 @@ function renderWeekGrid() {
       </div>
     `;
 
-    // Add click listeners to class cards
-    dayColumn.querySelectorAll(".class-card").forEach(card => {
-      card.addEventListener("click", (e) => {
-        // Handle select mode
-        if (isSelectMode) {
-          if (!e.target.classList.contains("class-select-cb")) {
-            const index = parseInt(card.dataset.index);
-            toggleClassSelection(index);
-          }
-          return;
-        }
-        // Don't open modal if clicking copy button or if we just finished dragging
-        if (e.target.classList.contains("copy-class-btn") || card.classList.contains("dragging")) {
-          return;
-        }
-        openEditModal(parseInt(card.dataset.index));
-      });
-
-      // Drag events (only in non-select mode)
-      if (!isSelectMode) {
-        card.addEventListener("dragstart", handleDragStart);
-        card.addEventListener("dragend", handleDragEnd);
-      }
-    });
-
-    // Add click listeners to selection checkboxes
-    dayColumn.querySelectorAll(".class-select-cb").forEach(cb => {
-      cb.addEventListener("change", (e) => {
-        e.stopPropagation();
-        const index = parseInt(cb.dataset.index);
-        toggleClassSelection(index);
-      });
-    });
-
-    // Add click listeners to copy buttons
-    dayColumn.querySelectorAll(".copy-class-btn").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        showCopyClassDialog(parseInt(btn.dataset.index));
-      });
-    });
-
-    // Drop zone events
-    dayColumn.addEventListener("dragover", handleDragOver);
-    dayColumn.addEventListener("dragleave", handleDragLeave);
-    dayColumn.addEventListener("drop", handleDrop);
+    // Event listeners are handled via event delegation on weekGrid (setupEventListeners)
+    // This prevents memory leaks from attaching listeners on every re-render
 
     weekGrid.appendChild(dayColumn);
   });
@@ -622,11 +645,21 @@ function selectAllClasses() {
 
 // Drag and Drop Handlers
 function handleDragStart(e) {
-  draggedClassIndex = parseInt(e.target.dataset.index);
-  e.target.classList.add("dragging");
+  const card = e.target.closest(".class-card");
+  if (!card || !card.dataset.index) return;
+
+  const index = parseInt(card.dataset.index);
+  // Validate index is within bounds
+  if (isNaN(index) || index < 0 || index >= classes.length) {
+    e.preventDefault();
+    return;
+  }
+
+  draggedClassIndex = index;
+  card.classList.add("dragging");
 
   if (isCopyDrag) {
-    e.target.classList.add("drag-copy");
+    card.classList.add("drag-copy");
   }
 
   // Set drag data
@@ -635,7 +668,10 @@ function handleDragStart(e) {
 }
 
 function handleDragEnd(e) {
-  e.target.classList.remove("dragging", "drag-copy");
+  const card = e.target.closest(".class-card");
+  if (card) {
+    card.classList.remove("dragging", "drag-copy");
+  }
   draggedClassIndex = null;
 
   // Remove all drag-over states
@@ -646,12 +682,17 @@ function handleDragEnd(e) {
 
 function handleDragOver(e) {
   e.preventDefault();
-  const dayColumn = e.currentTarget;
+  const dayColumn = e.target.closest(".day-column");
+  if (!dayColumn) return;
+
   const targetDay = dayColumn.dataset.day;
 
-  if (draggedClassIndex === null) return;
+  // Validate draggedClassIndex
+  if (draggedClassIndex === null || draggedClassIndex < 0 || draggedClassIndex >= classes.length) return;
 
   const draggedClass = classes[draggedClassIndex];
+  if (!draggedClass) return;
+
   const testClass = { ...draggedClass, day: targetDay };
 
   // Check if dropping here would cause a clash
@@ -668,19 +709,27 @@ function handleDragOver(e) {
 }
 
 function handleDragLeave(e) {
-  e.currentTarget.classList.remove("drag-over", "drag-over-clash");
+  const dayColumn = e.target.closest(".day-column");
+  if (dayColumn) {
+    dayColumn.classList.remove("drag-over", "drag-over-clash");
+  }
 }
 
 function handleDrop(e) {
   e.preventDefault();
-  const dayColumn = e.currentTarget;
+  const dayColumn = e.target.closest(".day-column");
+  if (!dayColumn) return;
+
   const targetDay = dayColumn.dataset.day;
 
   dayColumn.classList.remove("drag-over", "drag-over-clash");
 
-  if (draggedClassIndex === null) return;
+  // Validate draggedClassIndex before accessing classes array
+  if (draggedClassIndex === null || draggedClassIndex < 0 || draggedClassIndex >= classes.length) return;
 
   const draggedClass = classes[draggedClassIndex];
+  if (!draggedClass) return;
+
   const newClass = { ...draggedClass, day: targetDay };
 
   // Check for clash
@@ -1359,6 +1408,20 @@ function checkFormClash() {
 }
 
 // Auto-Suggest Available Slots
+// Initialize slot chips event delegation (called once in setupEventListeners)
+function initSlotChipsEventDelegation() {
+  slotsList.addEventListener("click", (e) => {
+    const chip = e.target.closest(".slot-chip");
+    if (!chip) return;
+
+    startTimeInput.value = chip.dataset.start;
+    endTimeInput.value = chip.dataset.end;
+    checkFormClash();
+    updateQuickSlotsClashState();
+    updateCopyToDayClashState();
+  });
+}
+
 function showSuggestedSlots(day) {
   const availableSlots = findAvailableSlots(day);
 
@@ -1373,16 +1436,7 @@ function showSuggestedSlots(day) {
     </button>
   `).join("");
 
-  // Add click listeners to slot chips
-  slotsList.querySelectorAll(".slot-chip").forEach(chip => {
-    chip.addEventListener("click", () => {
-      startTimeInput.value = chip.dataset.start;
-      endTimeInput.value = chip.dataset.end;
-      checkFormClash();
-      updateQuickSlotsClashState();
-      updateCopyToDayClashState();
-    });
-  });
+  // Event listeners handled via delegation (initSlotChipsEventDelegation)
 
   suggestedSlots.classList.remove("hidden");
 }
@@ -1508,6 +1562,8 @@ function renderStudentSchedule() {
 // Utility Functions
 function saveClasses() {
   localStorage.setItem("classes", JSON.stringify(classes));
+  // Clear selection to prevent stale indices after class modifications
+  selectedClasses.clear();
 }
 
 function formatTime(time24) {
@@ -1579,8 +1635,19 @@ function getReportDateRange() {
 
     label = `${formatDateLong(startDate)} - ${formatDateLong(endDate)}`;
   } else {
-    // Default to this week
-    return getReportDateRange();
+    // Default to this week (fallback for invalid reportPeriod)
+    reportPeriod = 'week';
+    const dayOfWeek = now.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    startDate = new Date(now);
+    startDate.setDate(now.getDate() + diff);
+    startDate.setHours(0, 0, 0, 0);
+
+    endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    endDate.setHours(23, 59, 59, 999);
+
+    label = `Week of ${formatDateLong(startDate)}`;
   }
 
   return { startDate, endDate, label };
@@ -1780,7 +1847,22 @@ function renderReport() {
     tbody.querySelectorAll('.student-rate-input').forEach(input => {
       input.addEventListener('change', (e) => {
         const student = e.target.dataset.student;
-        const newRate = parseInt(e.target.value) || 0;
+        let newRate = parseInt(e.target.value);
+
+        // Validate rate - must be non-negative
+        if (isNaN(newRate) || newRate < 0) {
+          newRate = 0;
+          e.target.value = 0;
+          showToast('Rate must be a positive number');
+        }
+
+        // Cap at reasonable maximum (100000)
+        if (newRate > 100000) {
+          newRate = 100000;
+          e.target.value = 100000;
+          showToast('Rate capped at maximum value');
+        }
+
         studentRates[student] = newRate;
         localStorage.setItem('studentRates', JSON.stringify(studentRates));
         renderReport();
@@ -2046,6 +2128,7 @@ function exportData() {
 // Import data from JSON file
 function importData(file) {
   const reader = new FileReader();
+
   reader.onload = function(e) {
     try {
       const importedData = JSON.parse(e.target.result);
@@ -2081,6 +2164,13 @@ function importData(file) {
       console.error('Import error:', error);
     }
   };
+
+  // Handle file read errors
+  reader.onerror = function() {
+    showToast('Error: Could not read the file');
+    console.error('FileReader error:', reader.error);
+  };
+
   reader.readAsText(file);
 }
 
