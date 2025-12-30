@@ -1991,15 +1991,21 @@ function sendClassReminder(classData) {
 
   // Also try browser/PWA notification
   const options = {
-    body: `${formatTime(classData.start)} - ${formatTime(classData.end)}`,
+    body: `⏰ ${formatTime(classData.start)} - ${formatTime(classData.end)}\nGet ready!`,
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
     tag: `class-${classData.student}-${classData.start}`,
     requireInteraction: true,
-    vibrate: [200, 100, 200]
+    vibrate: [300, 100, 300, 100, 300], // Longer vibration pattern
+    actions: [
+      { action: 'view', title: '📅 View Schedule' },
+      { action: 'dismiss', title: '✓ Got it' }
+    ],
+    renotify: true,
+    silent: false
   };
 
-  const title = `${classData.student}'s class in 15 min!`;
+  const title = `🔔 ${classData.student}'s class in 15 min!`;
 
   // Use Service Worker for PWA notifications
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
