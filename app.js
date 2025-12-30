@@ -1874,26 +1874,41 @@ function testNotification() {
 }
 
 function sendTestNotification() {
-  try {
-    const notification = new Notification('Test Notification', {
-      body: 'Notifications are working! You will receive reminders 15 min before classes.',
-      icon: 'icons/icon-192.png',
-      badge: 'icons/icon-192.png',
-      tag: 'test-notification',
-      requireInteraction: false,
-      vibrate: [200, 100, 200]
+  const options = {
+    body: 'Notifications are working! You will receive reminders 15 min before classes.',
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    tag: 'test-notification',
+    requireInteraction: false,
+    vibrate: [200, 100, 200]
+  };
+
+  // Use Service Worker for PWA notifications
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(registration => {
+      registration.showNotification('Test Notification', options)
+        .then(() => {
+          showToast('Test notification sent!');
+        })
+        .catch(error => {
+          console.error('SW notification error:', error);
+          showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
+        });
     });
-
-    notification.onclick = () => {
-      window.focus();
-      notification.close();
-    };
-
-    setTimeout(() => notification.close(), 5000);
-    showToast('Test notification sent!');
-  } catch (error) {
-    console.error('Test notification error:', error);
-    showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
+  } else {
+    // Fallback for regular browser
+    try {
+      const notification = new Notification('Test Notification', options);
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+      setTimeout(() => notification.close(), 5000);
+      showToast('Test notification sent!');
+    } catch (error) {
+      console.error('Test notification error:', error);
+      showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
+    }
   }
 }
 
@@ -1974,7 +1989,7 @@ function sendClassReminder(classData) {
     `${classData.student}\n${formatTime(classData.start)} - ${formatTime(classData.end)}`
   );
 
-  // Also try browser notification
+  // Also try browser/PWA notification
   const options = {
     body: `Class with ${classData.student} at ${formatTime(classData.start)}`,
     icon: 'icons/icon-192.png',
@@ -1984,18 +1999,24 @@ function sendClassReminder(classData) {
     vibrate: [200, 100, 200]
   };
 
-  try {
-    const notification = new Notification('Class in 15 minutes!', options);
-
-    notification.onclick = () => {
-      window.focus();
-      notification.close();
-    };
-
-    // Auto close after 5 minutes
-    setTimeout(() => notification.close(), 300000);
-  } catch (error) {
-    console.error('Notification error:', error);
+  // Use Service Worker for PWA notifications
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(registration => {
+      registration.showNotification('Class in 15 minutes!', options)
+        .catch(error => console.error('SW notification error:', error));
+    });
+  } else {
+    // Fallback for regular browser
+    try {
+      const notification = new Notification('Class in 15 minutes!', options);
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+      setTimeout(() => notification.close(), 300000);
+    } catch (error) {
+      console.error('Notification error:', error);
+    }
   }
 }
 
