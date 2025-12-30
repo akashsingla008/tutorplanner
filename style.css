@@ -1426,3 +1426,93 @@ header .subtitle {
     display: none;
   }
 }
+
+/* Backup Button */
+.backup-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+}
+
+.backup-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.backup-btn:active {
+  transform: scale(0.95);
+}
+
+/* Backup Dialog Styles */
+.backup-dialog-content {
+  padding: 8px;
+}
+
+.backup-dialog-content h3 {
+  margin: 0 0 20px;
+  color: #1f2937;
+  font-size: 1.25rem;
+}
+
+.backup-section {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.backup-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.backup-section h4 {
+  margin: 0 0 8px;
+  color: #374151;
+  font-size: 1rem;
+}
+
+.backup-section p {
+  margin: 0 0 12px;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.backup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.backup-item {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.backup-item:hover {
+  background: #dbeafe;
+  border-color: #3b82f6;
+}
+
+.backup-item:active {
+  transform: scale(0.98);
+}

@@ -62,6 +62,7 @@ function init() {
   setupEventListeners();
   updateStudentDropdowns();
   checkForClashes();
+  checkAndCreateBackup();
 }
 
 // Event Listeners Setup
@@ -1612,4 +1613,209 @@ function copyReminderToClipboard(message, student) {
     document.body.removeChild(textarea);
     showToast(`Reminder copied! Paste and send to ${student}'s parent`);
   });
+}
+
+// ==================== BACKUP FUNCTIONS ====================
+
+// Check and create automatic backup (weekly)
+function checkAndCreateBackup() {
+  const lastBackupDate = localStorage.getItem('lastBackupDate');
+  const now = new Date();
+  const daysSinceBackup = lastBackupDate
+    ? Math.floor((now - new Date(lastBackupDate)) / (1000 * 60 * 60 * 24))
+    : 999;
+
+  // Create backup if more than 7 days since last backup
+  if (daysSinceBackup >= 7) {
+    createAutoBackup();
+  }
+}
+
+// Create automatic backup
+function createAutoBackup() {
+  const backupData = {
+    timestamp: new Date().toISOString(),
+    classes: classes,
+    studentRates: studentRates,
+    paymentStatus: paymentStatus,
+    defaultRate: defaultRate
+  };
+
+  // Get existing backups
+  let backups = JSON.parse(localStorage.getItem('autoBackups')) || [];
+
+  // Add new backup
+  backups.unshift(backupData);
+
+  // Keep only last 4 backups
+  backups = backups.slice(0, 4);
+
+  localStorage.setItem('autoBackups', JSON.stringify(backups));
+  localStorage.setItem('lastBackupDate', new Date().toISOString());
+}
+
+// Export data to JSON file
+function exportData() {
+  const exportData = {
+    exportDate: new Date().toISOString(),
+    version: '1.0',
+    data: {
+      classes: classes,
+      studentRates: studentRates,
+      paymentStatus: paymentStatus,
+      defaultRate: defaultRate
+    }
+  };
+
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mindful-maths-backup-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast('Backup downloaded successfully!');
+}
+
+// Import data from JSON file
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const importedData = JSON.parse(e.target.result);
+
+      // Validate the data structure
+      if (!importedData.data || !importedData.data.classes) {
+        throw new Error('Invalid backup file format');
+      }
+
+      // Confirm before overwriting
+      if (confirm(`This will replace all current data with the backup from ${new Date(importedData.exportDate).toLocaleDateString()}. Continue?`)) {
+        // Import the data
+        classes = importedData.data.classes || [];
+        studentRates = importedData.data.studentRates || {};
+        paymentStatus = importedData.data.paymentStatus || {};
+        defaultRate = importedData.data.defaultRate || 500;
+
+        // Save to localStorage
+        saveClasses();
+        localStorage.setItem('studentRates', JSON.stringify(studentRates));
+        localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+        localStorage.setItem('defaultRate', defaultRate);
+
+        // Refresh UI
+        renderWeekGrid();
+        updateStudentDropdowns();
+        renderReport();
+
+        showToast('Data restored successfully!');
+      }
+    } catch (error) {
+      showToast('Error: Invalid backup file');
+      console.error('Import error:', error);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Show backup/restore dialog
+function showBackupDialog() {
+  const backups = JSON.parse(localStorage.getItem('autoBackups')) || [];
+
+  let backupListHtml = '';
+  if (backups.length > 0) {
+    backupListHtml = backups.map((backup, index) => {
+      const date = new Date(backup.timestamp);
+      return `<button class="backup-item" onclick="restoreAutoBackup(${index})">
+        ${date.toLocaleDateString()} ${date.toLocaleTimeString()}
+        (${backup.classes.length} classes)
+      </button>`;
+    }).join('');
+  } else {
+    backupListHtml = '<p class="empty-state">No automatic backups yet</p>';
+  }
+
+  const dialogHtml = `
+    <div class="backup-dialog-content">
+      <h3>Data Backup & Restore</h3>
+
+      <div class="backup-section">
+        <h4>Export Data</h4>
+        <p>Download a backup file to your device</p>
+        <button class="btn btn-primary" onclick="exportData()">Download Backup</button>
+      </div>
+
+      <div class="backup-section">
+        <h4>Import Data</h4>
+        <p>Restore from a backup file</p>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)" />
+        <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">Choose Backup File</button>
+      </div>
+
+      <div class="backup-section">
+        <h4>Auto Backups (Last 4 weeks)</h4>
+        <div class="backup-list">
+          ${backupListHtml}
+        </div>
+      </div>
+
+      <button class="btn btn-secondary" onclick="closeBackupDialog()" style="margin-top: 16px;">Close</button>
+    </div>
+  `;
+
+  // Create dialog overlay
+  const dialog = document.createElement('div');
+  dialog.id = 'backupDialog';
+  dialog.className = 'modal';
+  dialog.innerHTML = `<div class="modal-content">${dialogHtml}</div>`;
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) closeBackupDialog();
+  });
+  document.body.appendChild(dialog);
+}
+
+function closeBackupDialog() {
+  const dialog = document.getElementById('backupDialog');
+  if (dialog) dialog.remove();
+}
+
+function handleImportFile(event) {
+  const file = event.target.files[0];
+  if (file) {
+    importData(file);
+    closeBackupDialog();
+  }
+}
+
+// Restore from auto backup
+function restoreAutoBackup(index) {
+  const backups = JSON.parse(localStorage.getItem('autoBackups')) || [];
+  const backup = backups[index];
+
+  if (!backup) return;
+
+  const date = new Date(backup.timestamp);
+  if (confirm(`Restore backup from ${date.toLocaleDateString()} ${date.toLocaleTimeString()}? This will replace all current data.`)) {
+    classes = backup.classes || [];
+    studentRates = backup.studentRates || {};
+    paymentStatus = backup.paymentStatus || {};
+    defaultRate = backup.defaultRate || 500;
+
+    // Save to localStorage
+    saveClasses();
+    localStorage.setItem('studentRates', JSON.stringify(studentRates));
+    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    localStorage.setItem('defaultRate', defaultRate);
+
+    // Refresh UI
+    renderWeekGrid();
+    updateStudentDropdowns();
+    renderReport();
+
+    closeBackupDialog();
+    showToast('Data restored successfully!');
+  }
 }
