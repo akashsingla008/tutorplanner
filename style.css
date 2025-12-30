@@ -1185,12 +1185,20 @@ header .subtitle {
   border-left: 4px solid #3d8fc4;
 }
 
+.summary-card.completed {
+  border-left-color: #10b981;
+}
+
+.summary-card.upcoming {
+  border-left-color: #f59e0b;
+}
+
 .summary-card.cancelled {
   border-left-color: #ef4444;
 }
 
 .summary-card.hours {
-  border-left-color: #10b981;
+  border-left-color: #3b82f6;
 }
 
 .summary-value {

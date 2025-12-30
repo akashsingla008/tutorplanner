@@ -1676,29 +1676,7 @@ function renderReport() {
   // Get classes in range (for now, all classes since we don't have date-specific data)
   const classesInRange = getClassesInRange(startDate, endDate);
 
-  // Calculate totals
-  let totalClasses = classesInRange.length;
-  let cancelledCount = classesInRange.filter(c => c.cancelled).length;
-  let pendingCount = classesInRange.filter(c => c.pendingConfirmation).length;
-  let completedCount = totalClasses - cancelledCount - pendingCount;
-  let totalMinutes = 0;
-
-  // Calculate hours for confirmed (non-cancelled, non-pending) classes only
-  classesInRange.forEach(c => {
-    if (!c.cancelled && !c.pendingConfirmation) {
-      totalMinutes += getMinutesBetween(c.start, c.end);
-    }
-  });
-
-  const totalHours = (totalMinutes / 60).toFixed(1);
-
-  // Update summary cards
-  document.getElementById("totalClasses").textContent = totalClasses;
-  document.getElementById("completedClasses").textContent = completedCount;
-  document.getElementById("cancelledClasses").textContent = cancelledCount;
-  document.getElementById("totalHours").textContent = totalHours;
-
-  // Helper to check if a day is in the past (before today)
+  // Helper to check if a class is completed (day/time has passed)
   const today = new Date();
   const todayDayIndex = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
   const dayIndexMap = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
@@ -1724,6 +1702,35 @@ function renderReport() {
     }
     return false;
   }
+
+  // Calculate totals with proper completed/upcoming distinction
+  let totalClasses = classesInRange.length;
+  let cancelledCount = classesInRange.filter(c => c.cancelled).length;
+  let pendingCount = classesInRange.filter(c => c.pendingConfirmation).length;
+  let completedCount = 0;
+  let upcomingCount = 0;
+  let completedMinutes = 0;
+
+  // Calculate completed vs upcoming for confirmed (non-cancelled, non-pending) classes
+  classesInRange.forEach(c => {
+    if (!c.cancelled && !c.pendingConfirmation) {
+      if (isClassCompleted(c)) {
+        completedCount++;
+        completedMinutes += getMinutesBetween(c.start, c.end);
+      } else {
+        upcomingCount++;
+      }
+    }
+  });
+
+  const totalHours = (completedMinutes / 60).toFixed(1);
+
+  // Update summary cards
+  document.getElementById("totalClasses").textContent = totalClasses;
+  document.getElementById("completedClasses").textContent = completedCount;
+  document.getElementById("upcomingClasses").textContent = upcomingCount + pendingCount;
+  document.getElementById("cancelledClasses").textContent = cancelledCount;
+  document.getElementById("totalHours").textContent = totalHours;
 
   // Calculate per-student stats
   const studentStats = {};
