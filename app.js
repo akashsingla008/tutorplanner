@@ -643,6 +643,12 @@ function selectAllClasses() {
   renderWeekGrid();
 }
 
+// Expose select mode functions globally for HTML onclick handlers
+window.enterSelectMode = enterSelectMode;
+window.exitSelectMode = exitSelectMode;
+window.deleteSelectedClasses = deleteSelectedClasses;
+window.selectAllClasses = selectAllClasses;
+
 // Drag and Drop Handlers
 function handleDragStart(e) {
   const card = e.target.closest(".class-card");
