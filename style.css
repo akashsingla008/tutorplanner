@@ -622,6 +622,41 @@ header .subtitle {
   border-radius: 10px;
   margin-bottom: 16px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.form-clash.hidden {
+  display: none;
+}
+
+.clash-message {
+  flex: 1;
+  min-width: 150px;
+}
+
+.allow-clash-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #dc2626;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.allow-clash-btn:hover {
+  background: #b91c1c;
+}
+
+.allow-clash-btn:active {
+  transform: scale(0.95);
 }
 
 /* Suggested Slots */

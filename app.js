@@ -13,6 +13,7 @@ let studentRates = JSON.parse(localStorage.getItem('studentRates')) || {};
 let paymentStatus = JSON.parse(localStorage.getItem('paymentStatus')) || {};
 let isSelectMode = false;
 let selectedClasses = new Set();
+let allowClashOverride = false; // Flag to allow saving despite clash
 
 // Days of the week
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -107,6 +108,9 @@ function setupEventListeners() {
 
   // Restore button
   document.getElementById("restoreBtn").addEventListener("click", handleRestoreClass);
+
+  // Allow Clash button
+  document.getElementById("allowClashBtn").addEventListener("click", handleAllowClash);
 
   // Real-time clash detection in form
   [daySelect, startTimeInput, endTimeInput].forEach(input => {
@@ -853,6 +857,7 @@ function resetFormUI() {
   copyToDaySection.classList.add("hidden");
   cancelSection.classList.add("hidden");
   restoreSection.classList.add("hidden");
+  allowClashOverride = false; // Reset clash override flag
 
   // Reset duration to default
   selectedDuration = 60;
@@ -999,7 +1004,7 @@ function handleFormSubmit(e) {
   }
 
   // Check for clashes (excluding current class if editing)
-  if (hasClash(cls, editingIndex)) {
+  if (hasClash(cls, editingIndex) && !allowClashOverride) {
     formClashWarning.classList.remove("hidden");
     showSuggestedSlots(cls.day);
     return;
@@ -1015,6 +1020,21 @@ function handleFormSubmit(e) {
   closeModal();
   renderWeekGrid();
   updateStudentDropdowns();
+
+  // Show toast if saved with clash
+  if (allowClashOverride) {
+    showToast("Class saved with time clash");
+  }
+}
+
+// Handle Allow Clash button click
+function handleAllowClash() {
+  allowClashOverride = true;
+  formClashWarning.classList.add("hidden");
+  suggestedSlots.classList.add("hidden");
+
+  // Trigger form submit
+  classForm.dispatchEvent(new Event('submit', { cancelable: true }));
 }
 
 function handleDelete() {
