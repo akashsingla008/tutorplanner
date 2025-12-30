@@ -765,15 +765,18 @@ function checkForClashes() {
   let hasClashFlag = false;
 
   DAYS.forEach(day => {
-    const dayClasses = classes.filter(c => c.day === day);
-    const clashingIndices = findClashingClasses(dayClasses);
+    const dayClasses = classes.filter(c => c.day === day && !c.cancelled);
 
-    // Check if any clashing class does NOT have allowedClash flag
-    // Only show warning for unexpected clashes
-    if (clashingIndices.length > 0) {
-      const hasUnexpectedClash = clashingIndices.some(idx => !dayClasses[idx].allowedClash);
-      if (hasUnexpectedClash) {
-        hasClashFlag = true;
+    // Check each pair for unexpected clashes
+    for (let i = 0; i < dayClasses.length; i++) {
+      for (let j = i + 1; j < dayClasses.length; j++) {
+        if (timesOverlap(dayClasses[i], dayClasses[j])) {
+          // Only show warning if NEITHER class has allowedClash flag
+          // (if one has it, the user intentionally allowed this pair)
+          if (!dayClasses[i].allowedClash && !dayClasses[j].allowedClash) {
+            hasClashFlag = true;
+          }
+        }
       }
     }
   });
