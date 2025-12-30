@@ -2021,7 +2021,7 @@ function createAutoBackup() {
 function exportData() {
   const exportData = {
     exportDate: new Date().toISOString(),
-    version: '1.0',
+    version: '2.0', // Updated for new class properties: pendingConfirmation, pendingSince, allowedClash
     data: {
       classes: classes,
       studentRates: studentRates,
@@ -2185,7 +2185,7 @@ function restoreAutoBackup(index) {
 
 // ==================== NOTIFICATION FUNCTIONS ====================
 
-let notificationsEnabled = false;
+let notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
 let notifiedClasses = new Set(); // Track which classes we've already notified about
 
 // Initialize notifications
@@ -2196,13 +2196,22 @@ function initNotifications() {
     return;
   }
 
-  // Check current permission
+  // Check current permission and restore saved preference
   if (Notification.permission === 'granted') {
-    notificationsEnabled = true;
+    // Only enable if user previously enabled (or first time)
+    const savedPref = localStorage.getItem('notificationsEnabled');
+    if (savedPref === null || savedPref === 'true') {
+      notificationsEnabled = true;
+      localStorage.setItem('notificationsEnabled', 'true');
+    }
     updateNotificationButton();
   } else if (Notification.permission !== 'denied') {
     // Show a prompt to enable notifications
     showNotificationPrompt();
+  } else {
+    // Permission denied, disable notifications
+    notificationsEnabled = false;
+    localStorage.setItem('notificationsEnabled', 'false');
   }
 
   // Load notified classes from session
@@ -2223,9 +2232,11 @@ function testNotification() {
     Notification.requestPermission().then(permission => {
       if (permission === 'granted') {
         notificationsEnabled = true;
+        localStorage.setItem('notificationsEnabled', 'true');
         updateNotificationButton();
         sendTestNotification();
       } else {
+        localStorage.setItem('notificationsEnabled', 'false');
         showInAppAlert('Permission Denied', 'Please enable notifications in your browser/device settings');
       }
     });
@@ -2291,8 +2302,11 @@ function requestNotificationPermission() {
   Notification.requestPermission().then(permission => {
     if (permission === 'granted') {
       notificationsEnabled = true;
+      localStorage.setItem('notificationsEnabled', 'true');
       updateNotificationButton();
       showToast('Notifications enabled!');
+    } else {
+      localStorage.setItem('notificationsEnabled', 'false');
     }
   });
 }
@@ -2314,8 +2328,8 @@ function checkUpcomingClasses() {
   const currentDay = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1]; // Convert to our day format
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  // Get today's classes
-  const todayClasses = classes.filter(c => c.day === currentDay && !c.cancelled);
+  // Get today's confirmed classes (exclude cancelled and pending confirmation)
+  const todayClasses = classes.filter(c => c.day === currentDay && !c.cancelled && !c.pendingConfirmation);
 
   todayClasses.forEach(c => {
     const [hours, minutes] = c.start.split(':').map(Number);
@@ -2443,11 +2457,13 @@ function toggleNotifications() {
   if (choice === '1') {
     if (notificationsEnabled) {
       notificationsEnabled = false;
+      localStorage.setItem('notificationsEnabled', 'false');
       updateNotificationButton();
       showToast('Notifications disabled');
     } else {
       if (Notification.permission === 'granted') {
         notificationsEnabled = true;
+        localStorage.setItem('notificationsEnabled', 'true');
         updateNotificationButton();
         showToast('Notifications enabled');
       } else {
@@ -2468,7 +2484,7 @@ function showNextClassInfo() {
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   const todayClasses = classes
-    .filter(c => c.day === currentDay && !c.cancelled)
+    .filter(c => c.day === currentDay && !c.cancelled && !c.pendingConfirmation)
     .sort((a, b) => a.start.localeCompare(b.start));
 
   if (todayClasses.length === 0) {
