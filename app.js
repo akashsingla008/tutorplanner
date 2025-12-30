@@ -1851,6 +1851,52 @@ function initNotifications() {
   }
 }
 
+// Test notification - to verify notifications are working
+function testNotification() {
+  if (!('Notification' in window)) {
+    showInAppAlert('Test', 'Notifications not supported on this device');
+    return;
+  }
+
+  if (Notification.permission !== 'granted') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        notificationsEnabled = true;
+        updateNotificationButton();
+        sendTestNotification();
+      } else {
+        showInAppAlert('Permission Denied', 'Please enable notifications in your browser/device settings');
+      }
+    });
+  } else {
+    sendTestNotification();
+  }
+}
+
+function sendTestNotification() {
+  try {
+    const notification = new Notification('Test Notification', {
+      body: 'Notifications are working! You will receive reminders 15 min before classes.',
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+      tag: 'test-notification',
+      requireInteraction: false,
+      vibrate: [200, 100, 200]
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+
+    setTimeout(() => notification.close(), 5000);
+    showToast('Test notification sent!');
+  } catch (error) {
+    console.error('Test notification error:', error);
+    showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
+  }
+}
+
 // Show notification permission prompt
 function showNotificationPrompt() {
   // Only show once per session
@@ -1922,6 +1968,13 @@ function checkUpcomingClasses() {
 function sendClassReminder(classData) {
   if (!notificationsEnabled) return;
 
+  // Always show in-app alert when app is open
+  showInAppAlert(
+    '⏰ Class in 15 minutes!',
+    `${classData.student}\n${formatTime(classData.start)} - ${formatTime(classData.end)}`
+  );
+
+  // Also try browser notification
   const options = {
     body: `Class with ${classData.student} at ${formatTime(classData.start)}`,
     icon: 'icons/icon-192.png',
@@ -1946,21 +1999,99 @@ function sendClassReminder(classData) {
   }
 }
 
-// Toggle notifications (can be called from settings)
+// Toggle notifications - now shows a menu with options
 function toggleNotifications() {
-  if (notificationsEnabled) {
-    notificationsEnabled = false;
-    updateNotificationButton();
-    showToast('Notifications disabled');
-  } else {
-    if (Notification.permission === 'granted') {
-      notificationsEnabled = true;
+  const choice = prompt(
+    `Notification Settings:\n\n` +
+    `1 - ${notificationsEnabled ? 'Disable' : 'Enable'} notifications\n` +
+    `2 - Test notification\n` +
+    `3 - Check next upcoming class\n` +
+    `4 - Cancel\n\n` +
+    `Enter 1, 2, 3, or 4:`
+  );
+
+  if (choice === '1') {
+    if (notificationsEnabled) {
+      notificationsEnabled = false;
       updateNotificationButton();
-      showToast('Notifications enabled');
+      showToast('Notifications disabled');
     } else {
-      requestNotificationPermission();
+      if (Notification.permission === 'granted') {
+        notificationsEnabled = true;
+        updateNotificationButton();
+        showToast('Notifications enabled');
+      } else {
+        requestNotificationPermission();
+      }
+    }
+  } else if (choice === '2') {
+    testNotification();
+  } else if (choice === '3') {
+    showNextClassInfo();
+  }
+}
+
+// Show next class info (for debugging)
+function showNextClassInfo() {
+  const now = new Date();
+  const currentDay = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1];
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const todayClasses = classes
+    .filter(c => c.day === currentDay && !c.cancelled)
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  if (todayClasses.length === 0) {
+    showInAppAlert('No Classes Today', `Today is ${currentDay}. No classes scheduled.`);
+    return;
+  }
+
+  // Find next upcoming class
+  let nextClass = null;
+  for (const c of todayClasses) {
+    const [hours, minutes] = c.start.split(':').map(Number);
+    const classMinutes = hours * 60 + minutes;
+    if (classMinutes > currentMinutes) {
+      nextClass = c;
+      break;
     }
   }
+
+  if (nextClass) {
+    const [hours, minutes] = nextClass.start.split(':').map(Number);
+    const classMinutes = hours * 60 + minutes;
+    const minutesUntil = classMinutes - currentMinutes;
+    showInAppAlert('Next Class',
+      `${nextClass.student} at ${formatTime(nextClass.start)}\n` +
+      `In ${minutesUntil} minutes\n` +
+      `(Reminder at ${minutesUntil - 15} min remaining)`
+    );
+  } else {
+    showInAppAlert('All Done', `All ${todayClasses.length} class(es) for today have passed.`);
+  }
+}
+
+// Show in-app alert (visible fallback for notifications)
+function showInAppAlert(title, message) {
+  // Remove any existing alert
+  const existing = document.querySelector('.in-app-alert');
+  if (existing) existing.remove();
+
+  const alert = document.createElement('div');
+  alert.className = 'in-app-alert';
+  alert.innerHTML = `
+    <div class="in-app-alert-content">
+      <div class="in-app-alert-title">${escapeHtml(title)}</div>
+      <div class="in-app-alert-message">${escapeHtml(message)}</div>
+      <button class="in-app-alert-close" onclick="this.parentElement.parentElement.remove()">OK</button>
+    </div>
+  `;
+  document.body.appendChild(alert);
+
+  // Auto-close after 10 seconds
+  setTimeout(() => {
+    if (alert.parentElement) alert.remove();
+  }, 10000);
 }
 
 // Update notification button appearance
