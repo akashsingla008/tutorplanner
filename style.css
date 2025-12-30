@@ -1310,6 +1310,33 @@ header .subtitle {
   font-weight: 500;
 }
 
+/* Report row color coding */
+.report-row-confirmed {
+  background: #f0fdf4; /* Light green - confirmed classes */
+}
+
+.report-row-paid {
+  background: #dcfce7; /* Slightly darker green - paid */
+}
+
+.report-row-pending {
+  background: #fef3c7; /* Amber - only pending classes */
+}
+
+.report-row-mixed {
+  background: #fefce8; /* Light yellow - mix of confirmed and pending */
+}
+
+.report-row-confirmed td:first-child strong,
+.report-row-paid td:first-child strong {
+  color: #166534;
+}
+
+.report-row-pending td:first-child strong,
+.report-row-mixed td:first-child strong {
+  color: #92400e;
+}
+
 /* Rate Setting */
 .rate-setting {
   background: white;

@@ -1680,8 +1680,18 @@ function renderReport() {
       const hasConfirmedClasses = confirmedClasses > 0;
       const hasPendingClasses = stats.pending > 0;
 
+      // Determine row class: green for confirmed-only, amber for pending
+      let rowClass = '';
+      if (hasPendingClasses && !hasConfirmedClasses) {
+        rowClass = 'report-row-pending'; // Only pending classes - amber
+      } else if (hasPendingClasses && hasConfirmedClasses) {
+        rowClass = 'report-row-mixed'; // Mix of confirmed and pending - light amber
+      } else if (hasConfirmedClasses) {
+        rowClass = isPaid ? 'report-row-paid' : 'report-row-confirmed'; // Green shades
+      }
+
       return `
-        <tr class="${isPaid && hasConfirmedClasses ? 'payment-cleared' : 'payment-pending'}">
+        <tr class="${rowClass}">
           <td>
             <strong>${escapeHtml(student)}</strong>
             ${hasPendingClasses ? `<span class="student-pending-badge">${stats.pending} awaiting</span>` : ''}
