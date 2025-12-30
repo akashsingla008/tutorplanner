@@ -1563,7 +1563,7 @@ function sendPaymentReminder(student, amount, period, classCount, hours, days) {
 Just a gentle reminder about ${student}'s tuition fees:
 📅 ${period}
 📚 ${classCount} class${classCount > 1 ? 'es' : ''} (${hours} hrs) - ${daysText}
-₹${parseInt(amount).toLocaleString()}
+*₹${parseInt(amount).toLocaleString()}*
 
 Let me know if you have any questions.
 
