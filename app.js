@@ -2041,7 +2041,7 @@ function showChartDayDetails(day, paid, completed, upcoming, classesInRange, isC
   let detailsHtml = `<div class="chart-details-popup">
     <div class="chart-details-header">
       <h4>${day}</h4>
-      <button class="chart-details-close" onclick="this.closest('.chart-details-popup').remove()">&times;</button>
+      <button class="chart-details-close">&times;</button>
     </div>
     <div class="chart-details-summary">
       ${paid > 0 ? `<span class="detail-paid">Paid: ₹${paid.toLocaleString()}</span>` : ''}
@@ -2093,6 +2093,15 @@ function showChartDayDetails(day, paid, completed, upcoming, classesInRange, isC
   // Add new popup
   const chartContainer = document.querySelector('.earnings-chart-container');
   chartContainer.insertAdjacentHTML('beforeend', detailsHtml);
+
+  // Add event listener for close button (inline onclick doesn't work for dynamically inserted HTML)
+  const closeBtn = chartContainer.querySelector('.chart-details-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function() {
+      const popup = document.querySelector('.chart-details-popup');
+      if (popup) popup.remove();
+    });
+  }
 }
 
 // Send payment reminder
