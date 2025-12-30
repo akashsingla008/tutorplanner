@@ -1493,7 +1493,7 @@ function renderReport() {
               <span class="payment-label">${isPaid ? 'Paid' : 'Pending'}</span>
             </label>
             ${!isPaid && amount > 0 ? `
-              <button class="reminder-btn" data-student="${escapeHtml(student)}" data-amount="${amount}" title="Send payment reminder">
+              <button class="reminder-btn" data-student="${escapeHtml(student)}" data-amount="${amount}" data-classes="${stats.total - stats.cancelled}" data-hours="${hours}" title="Send payment reminder">
                 📩
               </button>
             ` : ''}
@@ -1530,7 +1530,12 @@ function renderReport() {
       btn.addEventListener('click', (e) => {
         const student = e.target.dataset.student;
         const amount = e.target.dataset.amount;
-        sendPaymentReminder(student, amount, label);
+        const classCount = e.target.dataset.classes;
+        const hours = e.target.dataset.hours;
+        // Get the days this student has classes
+        const studentClasses = classes.filter(c => c.student === student && !c.cancelled);
+        const days = [...new Set(studentClasses.map(c => c.day))];
+        sendPaymentReminder(student, amount, label, classCount, hours, days);
       });
     });
   }
@@ -1549,17 +1554,21 @@ function renderReport() {
 }
 
 // Send payment reminder
-function sendPaymentReminder(student, amount, period) {
+function sendPaymentReminder(student, amount, period, classCount, hours, days) {
+  // Format days nicely
+  const daysText = days.length > 0 ? days.join(', ') : '';
+
   const message = `Hi! 🙏 Hope you're doing well!
 
 Just a gentle reminder about ${student}'s tuition fees:
 📅 ${period}
+📚 ${classCount} class${classCount > 1 ? 'es' : ''} (${hours} hrs) - ${daysText}
 💰 ₹${parseInt(amount).toLocaleString()}
 
 Let me know if you have any questions.
 
 Thanks! 😊
-- Mahak, 
+- Mahak,
 Mindful Maths by Mahak`;
 
   // Check if Web Share API is available (mostly on mobile)
