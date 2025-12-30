@@ -1983,18 +1983,21 @@ function checkUpcomingClasses() {
 function sendClassReminder(classData) {
   if (!notificationsEnabled) return;
 
-  // Always show in-app alert when app is open
-  showInAppAlert(
-    '⏰ Class in 15 minutes!',
-    `${classData.student}\n${formatTime(classData.start)} - ${formatTime(classData.end)}`
+  // Show non-blocking toast instead of modal alert (so multiple can stack)
+  showReminderToast(
+    `${classData.student}'s class`,
+    `${formatTime(classData.start)} - ${formatTime(classData.end)}`
   );
 
-  // Also try browser/PWA notification
+  // Use unique tag with timestamp to prevent notifications replacing each other
+  const uniqueTag = `class-${classData.student}-${classData.start}-${Date.now()}`;
+
+  // PWA notification options
   const options = {
     body: `⏰ ${formatTime(classData.start)} - ${formatTime(classData.end)}\nGet ready!`,
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
-    tag: `class-${classData.student}-${classData.start}`,
+    tag: uniqueTag,
     requireInteraction: true,
     vibrate: [300, 100, 300, 100, 300], // Longer vibration pattern
     actions: [
@@ -2002,7 +2005,10 @@ function sendClassReminder(classData) {
       { action: 'dismiss', title: '✓ Got it' }
     ],
     renotify: true,
-    silent: false
+    silent: false,
+    // These help with heads-up display on Android
+    urgency: 'high',
+    priority: 'high'
   };
 
   const title = `🔔 ${classData.student}'s class in 15 min!`;
@@ -2026,6 +2032,40 @@ function sendClassReminder(classData) {
       console.error('Notification error:', error);
     }
   }
+}
+
+// Non-blocking toast notification for class reminders
+function showReminderToast(title, message) {
+  const toast = document.createElement('div');
+  toast.className = 'reminder-toast';
+  toast.innerHTML = `
+    <div class="reminder-toast-icon">🔔</div>
+    <div class="reminder-toast-content">
+      <div class="reminder-toast-title">${escapeHtml(title)}</div>
+      <div class="reminder-toast-message">${escapeHtml(message)}</div>
+    </div>
+    <button class="reminder-toast-close" onclick="this.parentElement.remove()">✕</button>
+  `;
+
+  // Add to container (create if doesn't exist)
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  container.appendChild(toast);
+
+  // Animate in
+  setTimeout(() => toast.classList.add('show'), 10);
+
+  // Auto-remove after 15 seconds
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 15000);
 }
 
 // Toggle notifications - now shows a menu with options
