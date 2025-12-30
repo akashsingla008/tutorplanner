@@ -1875,7 +1875,7 @@ function testNotification() {
 
 function sendTestNotification() {
   const options = {
-    body: 'Notifications are working! You will receive reminders 15 min before classes.',
+    body: 'You will receive reminders 15 min before each class.',
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
     tag: 'test-notification',
@@ -1991,7 +1991,7 @@ function sendClassReminder(classData) {
 
   // Also try browser/PWA notification
   const options = {
-    body: `Class with ${classData.student} at ${formatTime(classData.start)}`,
+    body: `${formatTime(classData.start)} - ${formatTime(classData.end)}`,
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
     tag: `class-${classData.student}-${classData.start}`,
@@ -1999,16 +1999,18 @@ function sendClassReminder(classData) {
     vibrate: [200, 100, 200]
   };
 
+  const title = `${classData.student}'s class in 15 min!`;
+
   // Use Service Worker for PWA notifications
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     navigator.serviceWorker.ready.then(registration => {
-      registration.showNotification('Class in 15 minutes!', options)
+      registration.showNotification(title, options)
         .catch(error => console.error('SW notification error:', error));
     });
   } else {
     // Fallback for regular browser
     try {
-      const notification = new Notification('Class in 15 minutes!', options);
+      const notification = new Notification(title, options);
       notification.onclick = () => {
         window.focus();
         notification.close();
