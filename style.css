@@ -1427,8 +1427,8 @@ header .subtitle {
   }
 }
 
-/* Backup Button */
-.backup-btn {
+/* Header Icon Buttons */
+.header-icon-btn {
   width: 36px;
   height: 36px;
   border: none;
@@ -1440,16 +1440,24 @@ header .subtitle {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: 8px;
+  margin-left: 4px;
 }
 
-.backup-btn:hover {
+.header-icon-btn:hover {
   background: rgba(255, 255, 255, 0.3);
   transform: scale(1.05);
 }
 
-.backup-btn:active {
+.header-icon-btn:active {
   transform: scale(0.95);
+}
+
+.header-icon-btn.notification-active {
+  background: rgba(16, 185, 129, 0.5);
+}
+
+.header-icon-btn.notification-active:hover {
+  background: rgba(16, 185, 129, 0.6);
 }
 
 /* Backup Dialog Styles */

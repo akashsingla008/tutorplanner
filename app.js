@@ -63,6 +63,8 @@ function init() {
   updateStudentDropdowns();
   checkForClashes();
   checkAndCreateBackup();
+  initNotifications();
+  startClassReminderCheck();
 }
 
 // Event Listeners Setup
@@ -1817,5 +1819,160 @@ function restoreAutoBackup(index) {
 
     closeBackupDialog();
     showToast('Data restored successfully!');
+  }
+}
+
+// ==================== NOTIFICATION FUNCTIONS ====================
+
+let notificationsEnabled = false;
+let notifiedClasses = new Set(); // Track which classes we've already notified about
+
+// Initialize notifications
+function initNotifications() {
+  // Check if notifications are supported
+  if (!('Notification' in window)) {
+    console.log('Notifications not supported');
+    return;
+  }
+
+  // Check current permission
+  if (Notification.permission === 'granted') {
+    notificationsEnabled = true;
+    updateNotificationButton();
+  } else if (Notification.permission !== 'denied') {
+    // Show a prompt to enable notifications
+    showNotificationPrompt();
+  }
+
+  // Load notified classes from session
+  const stored = sessionStorage.getItem('notifiedClasses');
+  if (stored) {
+    notifiedClasses = new Set(JSON.parse(stored));
+  }
+}
+
+// Show notification permission prompt
+function showNotificationPrompt() {
+  // Only show once per session
+  if (sessionStorage.getItem('notificationPromptShown')) return;
+
+  setTimeout(() => {
+    if (confirm('Enable class reminders? You\'ll get a notification 15 minutes before each class.')) {
+      requestNotificationPermission();
+    }
+    sessionStorage.setItem('notificationPromptShown', 'true');
+  }, 2000);
+}
+
+// Request notification permission
+function requestNotificationPermission() {
+  Notification.requestPermission().then(permission => {
+    if (permission === 'granted') {
+      notificationsEnabled = true;
+      updateNotificationButton();
+      showToast('Notifications enabled!');
+    }
+  });
+}
+
+// Start checking for upcoming classes
+function startClassReminderCheck() {
+  // Check immediately
+  checkUpcomingClasses();
+
+  // Then check every minute
+  setInterval(checkUpcomingClasses, 60000);
+}
+
+// Check for classes starting in 15 minutes
+function checkUpcomingClasses() {
+  if (!notificationsEnabled) return;
+
+  const now = new Date();
+  const currentDay = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1]; // Convert to our day format
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // Get today's classes
+  const todayClasses = classes.filter(c => c.day === currentDay && !c.cancelled);
+
+  todayClasses.forEach(c => {
+    const [hours, minutes] = c.start.split(':').map(Number);
+    const classMinutes = hours * 60 + minutes;
+    const minutesUntilClass = classMinutes - currentMinutes;
+
+    // Create unique ID for this class instance (day + time + student)
+    const classId = `${currentDay}-${c.start}-${c.student}`;
+
+    // Notify if class is 14-16 minutes away (to handle minute boundaries)
+    if (minutesUntilClass >= 14 && minutesUntilClass <= 16 && !notifiedClasses.has(classId)) {
+      sendClassReminder(c);
+      notifiedClasses.add(classId);
+      sessionStorage.setItem('notifiedClasses', JSON.stringify([...notifiedClasses]));
+    }
+  });
+
+  // Clear old notifications at midnight
+  if (now.getHours() === 0 && now.getMinutes() === 0) {
+    notifiedClasses.clear();
+    sessionStorage.removeItem('notifiedClasses');
+  }
+}
+
+// Send class reminder notification
+function sendClassReminder(classData) {
+  if (!notificationsEnabled) return;
+
+  const options = {
+    body: `Class with ${classData.student} at ${formatTime(classData.start)}`,
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    tag: `class-${classData.student}-${classData.start}`,
+    requireInteraction: true,
+    vibrate: [200, 100, 200]
+  };
+
+  try {
+    const notification = new Notification('Class in 15 minutes!', options);
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+
+    // Auto close after 5 minutes
+    setTimeout(() => notification.close(), 300000);
+  } catch (error) {
+    console.error('Notification error:', error);
+  }
+}
+
+// Toggle notifications (can be called from settings)
+function toggleNotifications() {
+  if (notificationsEnabled) {
+    notificationsEnabled = false;
+    updateNotificationButton();
+    showToast('Notifications disabled');
+  } else {
+    if (Notification.permission === 'granted') {
+      notificationsEnabled = true;
+      updateNotificationButton();
+      showToast('Notifications enabled');
+    } else {
+      requestNotificationPermission();
+    }
+  }
+}
+
+// Update notification button appearance
+function updateNotificationButton() {
+  const btn = document.getElementById('notificationBtn');
+  if (btn) {
+    if (notificationsEnabled) {
+      btn.classList.add('notification-active');
+      btn.title = 'Notifications ON - Click to disable';
+    } else {
+      btn.classList.remove('notification-active');
+      btn.title = 'Notifications OFF - Click to enable';
+    }
   }
 }
