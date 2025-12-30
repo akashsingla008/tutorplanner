@@ -14,24 +14,51 @@ body {
 header {
   background: linear-gradient(135deg, #4f9fd5 0%, #2d7ab8 100%);
   color: white;
-  padding: 20px 16px;
-  text-align: center;
+  padding: 12px 16px;
   position: sticky;
   top: 0;
   z-index: 100;
   box-shadow: 0 2px 10px rgba(61, 143, 196, 0.3);
 }
 
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.header-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.header-text {
+  text-align: left;
+}
+
 header h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 700;
+  line-height: 1.2;
 }
 
 header .subtitle {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.header-planner {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 6px 12px;
+  border-radius: 20px;
   font-size: 0.85rem;
-  opacity: 0.9;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 /* Navigation Tabs */
@@ -40,7 +67,7 @@ header .subtitle {
   background: white;
   border-bottom: 1px solid #e5e7eb;
   position: sticky;
-  top: 76px;
+  top: 72px;
   z-index: 99;
 }
 
@@ -1167,5 +1194,114 @@ header .subtitle {
 
   .tab:active {
     background: #f3f4f6;
+  }
+}
+
+/* Payment Tracking Styles */
+.payment-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payment-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.payment-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #10b981;
+  cursor: pointer;
+}
+
+.payment-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.payment-pending .payment-label {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.payment-cleared .payment-label {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.payment-pending {
+  background: #fffbeb;
+}
+
+.payment-cleared {
+  background: #f0fdf4;
+}
+
+.reminder-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.reminder-btn:hover {
+  background: #fecaca;
+  transform: scale(1.05);
+}
+
+.reminder-btn:active {
+  transform: scale(0.95);
+}
+
+/* Footer payment summary */
+.pending-indicator {
+  color: #dc2626;
+  font-weight: 600;
+  background: #fee2e2;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.paid-indicator {
+  color: #059669;
+  font-weight: 600;
+  background: #d1fae5;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+/* Make report table scroll better on mobile */
+@media (max-width: 600px) {
+  .payment-cell {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .payment-checkbox {
+    flex-wrap: wrap;
+  }
+
+  .report-table th:nth-child(3),
+  .report-table td:nth-child(3) {
+    display: none;
   }
 }

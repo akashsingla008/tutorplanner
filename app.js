@@ -10,6 +10,7 @@ let customStartDate = null;
 let customEndDate = null;
 let defaultRate = parseInt(localStorage.getItem('defaultRate')) || 500;
 let studentRates = JSON.parse(localStorage.getItem('studentRates')) || {};
+let paymentStatus = JSON.parse(localStorage.getItem('paymentStatus')) || {};
 
 // Days of the week
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -1305,6 +1306,9 @@ function renderReport() {
   // Update period label
   document.getElementById("reportPeriodLabel").textContent = label;
 
+  // Create a period key for payment tracking
+  const periodKey = `${startDate.toISOString().split('T')[0]}_${endDate.toISOString().split('T')[0]}`;
+
   // Get classes in range (for now, all classes since we don't have date-specific data)
   const classesInRange = getClassesInRange(startDate, endDate);
 
@@ -1352,9 +1356,10 @@ function renderReport() {
   const students = Object.keys(studentStats).sort();
 
   let totalAmount = 0;
+  let paidAmount = 0;
 
   if (students.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9ca3af; padding: 24px;">No classes found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #9ca3af; padding: 24px;">No classes found</td></tr>';
   } else {
     tbody.innerHTML = students.map(student => {
       const stats = studentStats[student];
@@ -1363,8 +1368,13 @@ function renderReport() {
       const amount = Math.round((stats.minutes / 60) * rate);
       totalAmount += amount;
 
+      // Check payment status for this student and period
+      const paymentKey = `${student}_${periodKey}`;
+      const isPaid = paymentStatus[paymentKey] || false;
+      if (isPaid) paidAmount += amount;
+
       return `
-        <tr>
+        <tr class="${isPaid ? 'payment-cleared' : 'payment-pending'}">
           <td><strong>${escapeHtml(student)}</strong></td>
           <td>${stats.total - stats.cancelled}</td>
           <td class="cancelled-count">${stats.cancelled > 0 ? stats.cancelled : '-'}</td>
@@ -1376,6 +1386,20 @@ function renderReport() {
                    min="0" step="50" />
           </td>
           <td class="amount">₹${amount.toLocaleString()}</td>
+          <td class="payment-cell">
+            <label class="payment-checkbox">
+              <input type="checkbox" class="payment-toggle"
+                     data-student="${escapeHtml(student)}"
+                     data-period="${periodKey}"
+                     ${isPaid ? 'checked' : ''} />
+              <span class="payment-label">${isPaid ? 'Paid' : 'Pending'}</span>
+            </label>
+            ${!isPaid && amount > 0 ? `
+              <button class="reminder-btn" data-student="${escapeHtml(student)}" data-amount="${amount}" title="Send payment reminder">
+                📩
+              </button>
+            ` : ''}
+          </td>
         </tr>
       `;
     }).join('');
@@ -1390,6 +1414,27 @@ function renderReport() {
         renderReport();
       });
     });
+
+    // Add event listeners to payment toggles
+    tbody.querySelectorAll('.payment-toggle').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        const student = e.target.dataset.student;
+        const period = e.target.dataset.period;
+        const paymentKey = `${student}_${period}`;
+        paymentStatus[paymentKey] = e.target.checked;
+        localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+        renderReport();
+      });
+    });
+
+    // Add event listeners to reminder buttons
+    tbody.querySelectorAll('.reminder-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const student = e.target.dataset.student;
+        const amount = e.target.dataset.amount;
+        sendPaymentReminder(student, amount, label);
+      });
+    });
   }
 
   // Update footer totals
@@ -1397,4 +1442,57 @@ function renderReport() {
   document.getElementById("footerCancelled").textContent = cancelledCount;
   document.getElementById("footerHours").textContent = totalHours;
   document.getElementById("footerAmount").textContent = `₹${totalAmount.toLocaleString()}`;
+
+  // Update payment summary in footer
+  const pendingAmount = totalAmount - paidAmount;
+  document.getElementById("footerPayment").innerHTML = pendingAmount > 0
+    ? `<span class="pending-indicator">₹${pendingAmount.toLocaleString()} pending</span>`
+    : '<span class="paid-indicator">All Paid ✓</span>';
+}
+
+// Send payment reminder
+function sendPaymentReminder(student, amount, period) {
+  const message = `Hi! This is a friendly reminder regarding the pending payment for ${student}'s tuition classes.\n\nPeriod: ${period}\nAmount Due: ₹${parseInt(amount).toLocaleString()}\n\nPlease let me know if you have any questions.\n\nThank you!\n- Mindful Maths by Mahak`;
+
+  // Check if Web Share API is available (mostly on mobile)
+  if (navigator.share) {
+    navigator.share({
+      title: 'Payment Reminder',
+      text: message
+    }).catch(() => {
+      // User cancelled or share failed, fallback to copy
+      copyReminderToClipboard(message, student);
+    });
+  } else {
+    // Fallback: offer WhatsApp or copy options
+    const choice = prompt(
+      `Send reminder to ${student}'s parent:\n\n` +
+      `1 - Open WhatsApp (if you have their number)\n` +
+      `2 - Copy message to clipboard\n\n` +
+      `Enter 1 or 2:`
+    );
+
+    if (choice === '1') {
+      // Open WhatsApp with pre-filled message
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+    } else if (choice === '2') {
+      copyReminderToClipboard(message, student);
+    }
+  }
+}
+
+function copyReminderToClipboard(message, student) {
+  navigator.clipboard.writeText(message).then(() => {
+    showToast(`Reminder copied! Paste and send to ${student}'s parent`);
+  }).catch(() => {
+    // Fallback for older browsers
+    const textarea = document.createElement('textarea');
+    textarea.value = message;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    showToast(`Reminder copied! Paste and send to ${student}'s parent`);
+  });
 }
