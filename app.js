@@ -643,11 +643,11 @@ function selectAllClasses() {
   renderWeekGrid();
 }
 
-// Expose select mode functions globally for HTML onclick handlers
-window.enterSelectMode = enterSelectMode;
-window.exitSelectMode = exitSelectMode;
-window.deleteSelectedClasses = deleteSelectedClasses;
-window.selectAllClasses = selectAllClasses;
+// Select mode button event listeners (CSP-compliant - no inline onclick)
+document.getElementById("selectModeBtn").addEventListener("click", enterSelectMode);
+document.getElementById("selectCancelBtn").addEventListener("click", exitSelectMode);
+document.getElementById("selectAllBtn").addEventListener("click", selectAllClasses);
+document.getElementById("deleteSelectedBtn").addEventListener("click", deleteSelectedClasses);
 
 // Drag and Drop Handlers
 function handleDragStart(e) {
@@ -2754,3 +2754,7 @@ function updateNotificationButton() {
     }
   }
 }
+
+// Header button event listeners (CSP-compliant - no inline onclick)
+document.getElementById("notificationBtn").addEventListener("click", toggleNotifications);
+document.getElementById("backupBtn").addEventListener("click", showBackupDialog);
