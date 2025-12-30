@@ -1125,7 +1125,7 @@ function handleCheckWithStudent() {
 
 // Send WhatsApp confirmation message
 function sendWhatsAppConfirmation(cls) {
-  const dayName = cls.day;
+  const studentName = cls.student;
   const startTime = formatTime(cls.start);
   const endTime = formatTime(cls.end);
 
@@ -1137,7 +1137,7 @@ function sendWhatsAppConfirmation(cls) {
     month: 'short'
   });
 
-  const message = `Hi! 📚
+  const message = `Hi ${studentName}! 📚
 
 I'd like to schedule a class with you:
 
