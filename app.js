@@ -1631,6 +1631,33 @@ function renderReport() {
   document.getElementById("cancelledClasses").textContent = cancelledCount;
   document.getElementById("totalHours").textContent = totalHours;
 
+  // Helper to check if a day is in the past (before today)
+  const today = new Date();
+  const todayDayIndex = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const dayIndexMap = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
+
+  function isClassCompleted(cls) {
+    // If class has a completion date stored, use that
+    if (cls.completedDate) return true;
+
+    // Otherwise check if the day has passed this week
+    const classDayIndex = dayIndexMap[cls.day];
+
+    // If class day is before today in the week, it's completed
+    // If class day is today, check if the class end time has passed
+    if (classDayIndex < todayDayIndex) {
+      return true;
+    } else if (classDayIndex === todayDayIndex) {
+      // Check if class end time has passed
+      const now = new Date();
+      const [endHour, endMin] = cls.end.split(':').map(Number);
+      const classEndTime = new Date(now);
+      classEndTime.setHours(endHour, endMin, 0, 0);
+      return now > classEndTime;
+    }
+    return false;
+  }
+
   // Calculate per-student stats
   const studentStats = {};
   classesInRange.forEach(c => {
@@ -1639,7 +1666,10 @@ function renderReport() {
         total: 0,
         cancelled: 0,
         pending: 0,
-        minutes: 0
+        completed: 0,
+        upcoming: 0,
+        completedMinutes: 0,
+        upcomingMinutes: 0
       };
     }
     studentStats[c.student].total++;
@@ -1648,8 +1678,15 @@ function renderReport() {
     } else if (c.pendingConfirmation) {
       studentStats[c.student].pending++;
     } else {
-      // Only count confirmed classes for hours/payment
-      studentStats[c.student].minutes += getMinutesBetween(c.start, c.end);
+      // Check if class is completed or upcoming
+      const minutes = getMinutesBetween(c.start, c.end);
+      if (isClassCompleted(c)) {
+        studentStats[c.student].completed++;
+        studentStats[c.student].completedMinutes += minutes;
+      } else {
+        studentStats[c.student].upcoming++;
+        studentStats[c.student].upcomingMinutes += minutes;
+      }
     }
   });
 
@@ -1665,10 +1702,12 @@ function renderReport() {
   } else {
     tbody.innerHTML = students.map(student => {
       const stats = studentStats[student];
-      const confirmedClasses = stats.total - stats.cancelled - stats.pending;
-      const hours = (stats.minutes / 60).toFixed(1);
+      const completedClasses = stats.completed;
+      const upcomingClasses = stats.upcoming;
+      const completedHours = (stats.completedMinutes / 60).toFixed(1);
       const rate = studentRates[student] || defaultRate;
-      const amount = Math.round((stats.minutes / 60) * rate);
+      // Only calculate amount for completed classes
+      const amount = Math.round((stats.completedMinutes / 60) * rate);
       totalAmount += amount;
 
       // Check payment status for this student and period
@@ -1676,38 +1715,47 @@ function renderReport() {
       const isPaid = paymentStatus[paymentKey] || false;
       if (isPaid) paidAmount += amount;
 
-      // Only allow payment tracking for confirmed classes (not pending)
-      const hasConfirmedClasses = confirmedClasses > 0;
+      // Determine row class based on completed vs upcoming
+      const hasCompletedClasses = completedClasses > 0;
+      const hasUpcomingClasses = upcomingClasses > 0;
       const hasPendingClasses = stats.pending > 0;
 
-      // Determine row class: green for confirmed-only, amber for pending
+      // Row color logic:
+      // - Green: only completed classes (no upcoming, no pending)
+      // - Amber: only upcoming or pending classes (no completed)
+      // - Mixed (light yellow): has both completed and upcoming/pending
       let rowClass = '';
-      if (hasPendingClasses && !hasConfirmedClasses) {
-        rowClass = 'report-row-pending'; // Only pending classes - amber
-      } else if (hasPendingClasses && hasConfirmedClasses) {
-        rowClass = 'report-row-mixed'; // Mix of confirmed and pending - light amber
-      } else if (hasConfirmedClasses) {
+      if (!hasCompletedClasses && (hasUpcomingClasses || hasPendingClasses)) {
+        rowClass = 'report-row-pending'; // Only upcoming/pending - amber
+      } else if (hasCompletedClasses && (hasUpcomingClasses || hasPendingClasses)) {
+        rowClass = 'report-row-mixed'; // Mix of completed and upcoming - light yellow
+      } else if (hasCompletedClasses) {
         rowClass = isPaid ? 'report-row-paid' : 'report-row-confirmed'; // Green shades
       }
+
+      // Build badges for upcoming and pending
+      const badges = [];
+      if (hasUpcomingClasses) badges.push(`${upcomingClasses} upcoming`);
+      if (hasPendingClasses) badges.push(`${stats.pending} awaiting`);
 
       return `
         <tr class="${rowClass}">
           <td>
             <strong>${escapeHtml(student)}</strong>
-            ${hasPendingClasses ? `<span class="student-pending-badge">${stats.pending} awaiting</span>` : ''}
+            ${badges.length > 0 ? `<span class="student-pending-badge">${badges.join(', ')}</span>` : ''}
           </td>
-          <td>${confirmedClasses}${hasPendingClasses ? ` <span class="pending-count">(+${stats.pending})</span>` : ''}</td>
+          <td>${completedClasses}${(hasUpcomingClasses || hasPendingClasses) ? ` <span class="pending-count">(+${upcomingClasses + stats.pending})</span>` : ''}</td>
           <td class="cancelled-count">${stats.cancelled > 0 ? stats.cancelled : '-'}</td>
-          <td>${hours}</td>
+          <td>${completedHours}</td>
           <td>
             <input type="number" class="student-rate-input"
                    data-student="${escapeHtml(student)}"
                    value="${rate}"
                    min="0" step="50" />
           </td>
-          <td class="amount">${hasConfirmedClasses ? `₹${amount.toLocaleString()}` : '-'}</td>
+          <td class="amount">${hasCompletedClasses ? `₹${amount.toLocaleString()}` : '-'}</td>
           <td class="payment-cell">
-            ${hasConfirmedClasses ? `
+            ${hasCompletedClasses ? `
               <label class="payment-checkbox">
                 <input type="checkbox" class="payment-toggle"
                        data-student="${escapeHtml(student)}"
@@ -1716,7 +1764,7 @@ function renderReport() {
                 <span class="payment-label">${isPaid ? 'Paid' : 'Pending'}</span>
               </label>
               ${!isPaid && amount > 0 ? `
-                <button class="reminder-btn" data-student="${escapeHtml(student)}" data-amount="${amount}" data-classes="${confirmedClasses}" data-hours="${hours}" title="Send payment reminder">
+                <button class="reminder-btn" data-student="${escapeHtml(student)}" data-amount="${amount}" data-classes="${completedClasses}" data-hours="${completedHours}" title="Send payment reminder">
                   📩
                 </button>
               ` : ''}
