@@ -766,8 +766,15 @@ function checkForClashes() {
 
   DAYS.forEach(day => {
     const dayClasses = classes.filter(c => c.day === day);
-    if (findClashingClasses(dayClasses).length > 0) {
-      hasClashFlag = true;
+    const clashingIndices = findClashingClasses(dayClasses);
+
+    // Check if any clashing class does NOT have allowedClash flag
+    // Only show warning for unexpected clashes
+    if (clashingIndices.length > 0) {
+      const hasUnexpectedClash = clashingIndices.some(idx => !dayClasses[idx].allowedClash);
+      if (hasUnexpectedClash) {
+        hasClashFlag = true;
+      }
     }
   });
 
@@ -1039,6 +1046,11 @@ function handleFormSubmit(e) {
     return;
   }
 
+  // Mark class as having allowed clash if override was used
+  if (allowClashOverride) {
+    cls.allowedClash = true;
+  }
+
   if (editingIndex !== null) {
     classes[editingIndex] = cls;
   } else {
@@ -1104,6 +1116,11 @@ function handleCheckWithStudent() {
     formClashWarning.classList.remove("hidden");
     showSuggestedSlots(cls.day);
     return;
+  }
+
+  // Mark class as having allowed clash if override was used
+  if (allowClashOverride) {
+    cls.allowedClash = true;
   }
 
   if (editingIndex !== null) {
