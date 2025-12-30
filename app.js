@@ -11,6 +11,8 @@ let customEndDate = null;
 let defaultRate = parseInt(localStorage.getItem('defaultRate')) || 500;
 let studentRates = JSON.parse(localStorage.getItem('studentRates')) || {};
 let paymentStatus = JSON.parse(localStorage.getItem('paymentStatus')) || {};
+let isSelectMode = false;
+let selectedClasses = new Set();
 
 // Days of the week
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -425,6 +427,9 @@ function renderWeekGrid() {
     dragHint.classList.add("hidden");
   }
 
+  // Update select mode UI
+  updateSelectModeUI();
+
   DAYS.forEach((day, index) => {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + index);
@@ -451,16 +456,22 @@ function renderWeekGrid() {
                 const hasClash = clashingIndices.includes(i);
                 const isCancelled = c.cancelled;
                 const cancelLabel = isCancelled ? CANCEL_REASONS[c.cancelReason] || 'Cancelled' : '';
+                const isSelected = selectedClasses.has(globalIndex);
                 return `
-                  <div class="class-card ${hasClash ? 'clash' : ''} ${isCancelled ? 'cancelled' : ''}"
+                  <div class="class-card ${hasClash ? 'clash' : ''} ${isCancelled ? 'cancelled' : ''} ${isSelected ? 'selected' : ''}"
                        data-index="${globalIndex}"
-                       draggable="${!isCancelled}">
+                       draggable="${!isCancelled && !isSelectMode}">
+                    ${isSelectMode ? `
+                      <label class="select-checkbox">
+                        <input type="checkbox" class="class-select-cb" data-index="${globalIndex}" ${isSelected ? 'checked' : ''} />
+                      </label>
+                    ` : ''}
                     <div class="class-card-content">
                       <div class="student-name">${escapeHtml(c.student)}</div>
                       <div class="class-time">${formatTime(c.start)} - ${formatTime(c.end)}</div>
                       ${isCancelled ? `<div class="cancel-badge">${cancelLabel}</div>` : ''}
                     </div>
-                    ${!isCancelled ? `<button class="copy-class-btn" data-index="${globalIndex}" title="Copy to another day">⧉</button>` : ''}
+                    ${!isCancelled && !isSelectMode ? `<button class="copy-class-btn" data-index="${globalIndex}" title="Copy to another day">⧉</button>` : ''}
                   </div>
                 `;
               }).join("")
@@ -471,6 +482,14 @@ function renderWeekGrid() {
     // Add click listeners to class cards
     dayColumn.querySelectorAll(".class-card").forEach(card => {
       card.addEventListener("click", (e) => {
+        // Handle select mode
+        if (isSelectMode) {
+          if (!e.target.classList.contains("class-select-cb")) {
+            const index = parseInt(card.dataset.index);
+            toggleClassSelection(index);
+          }
+          return;
+        }
         // Don't open modal if clicking copy button or if we just finished dragging
         if (e.target.classList.contains("copy-class-btn") || card.classList.contains("dragging")) {
           return;
@@ -478,9 +497,20 @@ function renderWeekGrid() {
         openEditModal(parseInt(card.dataset.index));
       });
 
-      // Drag events
-      card.addEventListener("dragstart", handleDragStart);
-      card.addEventListener("dragend", handleDragEnd);
+      // Drag events (only in non-select mode)
+      if (!isSelectMode) {
+        card.addEventListener("dragstart", handleDragStart);
+        card.addEventListener("dragend", handleDragEnd);
+      }
+    });
+
+    // Add click listeners to selection checkboxes
+    dayColumn.querySelectorAll(".class-select-cb").forEach(cb => {
+      cb.addEventListener("change", (e) => {
+        e.stopPropagation();
+        const index = parseInt(cb.dataset.index);
+        toggleClassSelection(index);
+      });
     });
 
     // Add click listeners to copy buttons
@@ -500,6 +530,74 @@ function renderWeekGrid() {
   });
 
   checkForClashes();
+}
+
+// Toggle class selection
+function toggleClassSelection(index) {
+  if (selectedClasses.has(index)) {
+    selectedClasses.delete(index);
+  } else {
+    selectedClasses.add(index);
+  }
+  renderWeekGrid();
+  updateSelectModeUI();
+}
+
+// Update select mode UI
+function updateSelectModeUI() {
+  const selectBar = document.getElementById("selectModeBar");
+  const selectedCount = document.getElementById("selectedCount");
+
+  if (isSelectMode) {
+    selectBar.classList.remove("hidden");
+    selectedCount.textContent = selectedClasses.size;
+  } else {
+    selectBar.classList.add("hidden");
+  }
+}
+
+// Enter select mode
+function enterSelectMode() {
+  isSelectMode = true;
+  selectedClasses.clear();
+  renderWeekGrid();
+}
+
+// Exit select mode
+function exitSelectMode() {
+  isSelectMode = false;
+  selectedClasses.clear();
+  renderWeekGrid();
+}
+
+// Delete selected classes
+function deleteSelectedClasses() {
+  if (selectedClasses.size === 0) {
+    showToast("No classes selected");
+    return;
+  }
+
+  const count = selectedClasses.size;
+  if (confirm(`Are you sure you want to delete ${count} class${count > 1 ? 'es' : ''}? This cannot be undone.`)) {
+    // Sort indices in descending order to delete from end first
+    const indicesToDelete = Array.from(selectedClasses).sort((a, b) => b - a);
+    indicesToDelete.forEach(index => {
+      classes.splice(index, 1);
+    });
+
+    saveClasses();
+    exitSelectMode();
+    updateStudentDropdowns();
+    showToast(`Deleted ${count} class${count > 1 ? 'es' : ''}`);
+  }
+}
+
+// Select all classes
+function selectAllClasses() {
+  classes.forEach((_, index) => {
+    selectedClasses.add(index);
+  });
+  renderWeekGrid();
 }
 
 // Drag and Drop Handlers
@@ -1452,7 +1550,20 @@ function renderReport() {
 
 // Send payment reminder
 function sendPaymentReminder(student, amount, period) {
-  const message = `Hi! This is a friendly reminder regarding the pending payment for ${student}'s tuition classes.\n\nPeriod: ${period}\nAmount Due: ₹${parseInt(amount).toLocaleString()}\n\nPlease let me know if you have any questions.\n\nThank you!\n- Mindful Maths by Mahak`;
+  const message = `Hello! 🙏
+
+Hope you and your family are doing well! I wanted to gently follow up regarding ${student}'s tuition fees for the recent classes.
+
+📅 Period: ${period}
+💰 Amount: ₹${parseInt(amount).toLocaleString()}
+
+I completely understand that sometimes things get busy, so no rush at all! Whenever it's convenient for you, please let me know if you have any questions or if you'd like to discuss anything.
+
+Thank you so much for your continued support and trust in Mindful Maths! It's truly a pleasure teaching ${student}. 😊
+
+Warm regards,
+Mahak
+Mindful Maths`;
 
   // Check if Web Share API is available (mostly on mobile)
   if (navigator.share) {

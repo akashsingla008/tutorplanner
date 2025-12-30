@@ -41,6 +41,18 @@
     <span id="weekLabel">This Week</span>
     <button id="nextWeek" class="nav-btn">▶</button>
     <button id="copyWeekBtn" class="copy-week-btn" title="Copy this week's schedule">Copy Week</button>
+    <button id="selectModeBtn" class="select-mode-btn" title="Select multiple classes" onclick="enterSelectMode()">Select</button>
+  </div>
+
+  <div id="selectModeBar" class="select-mode-bar hidden">
+    <div class="select-mode-info">
+      <button class="select-cancel-btn" onclick="exitSelectMode()">✕</button>
+      <span><span id="selectedCount">0</span> selected</span>
+    </div>
+    <div class="select-mode-actions">
+      <button class="select-all-btn" onclick="selectAllClasses()">Select All</button>
+      <button class="delete-selected-btn" onclick="deleteSelectedClasses()">Delete</button>
+    </div>
   </div>
 
   <div id="dragHint" class="drag-hint hidden">
