@@ -143,6 +143,19 @@ header .subtitle {
   margin-bottom: 12px;
 }
 
+.drag-hint .mobile-hint {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .drag-hint .desktop-hint {
+    display: none;
+  }
+  .drag-hint .mobile-hint {
+    display: inline;
+  }
+}
+
 /* Week Grid */
 .week-grid {
   display: flex;
@@ -188,6 +201,39 @@ header .subtitle {
   cursor: grab;
   transition: all 0.2s;
   user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.class-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.copy-class-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(61, 143, 196, 0.1);
+  color: #3d8fc4;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-class-btn:hover {
+  background: #3d8fc4;
+  color: white;
+}
+
+.copy-class-btn:active {
+  transform: scale(0.95);
 }
 
 .class-card:hover {
@@ -960,6 +1006,23 @@ header .subtitle {
   font-weight: 600;
 }
 
+/* Student Rate Input in Table */
+.student-rate-input {
+  width: 70px;
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.student-rate-input:focus {
+  outline: none;
+  border-color: #3d8fc4;
+  box-shadow: 0 0 0 2px rgba(61, 143, 196, 0.1);
+}
+
 /* Rate Setting */
 .rate-setting {
   background: white;
@@ -969,6 +1032,7 @@ header .subtitle {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .rate-setting label {
@@ -978,8 +1042,7 @@ header .subtitle {
 }
 
 .rate-setting input {
-  flex: 1;
-  max-width: 120px;
+  max-width: 100px;
   padding: 10px 12px;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
@@ -990,6 +1053,12 @@ header .subtitle {
 .rate-setting input:focus {
   outline: none;
   border-color: #3d8fc4;
+}
+
+.rate-hint {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  font-style: italic;
 }
 
 @media (min-width: 768px) {

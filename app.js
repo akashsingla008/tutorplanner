@@ -8,7 +8,8 @@ let isCopyDrag = false;
 let reportPeriod = 'week';
 let customStartDate = null;
 let customEndDate = null;
-let hourlyRate = parseInt(localStorage.getItem('hourlyRate')) || 500;
+let defaultRate = parseInt(localStorage.getItem('defaultRate')) || 500;
+let studentRates = JSON.parse(localStorage.getItem('studentRates')) || {};
 
 // Days of the week
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -201,11 +202,11 @@ function setupEventListeners() {
     }
   });
 
-  // Hourly rate change
-  document.getElementById("hourlyRate").value = hourlyRate;
-  document.getElementById("hourlyRate").addEventListener("change", (e) => {
-    hourlyRate = parseInt(e.target.value) || 0;
-    localStorage.setItem('hourlyRate', hourlyRate);
+  // Default rate change
+  document.getElementById("defaultRate").value = defaultRate;
+  document.getElementById("defaultRate").addEventListener("change", (e) => {
+    defaultRate = parseInt(e.target.value) || 0;
+    localStorage.setItem('defaultRate', defaultRate);
     renderReport();
   });
 
@@ -366,6 +367,51 @@ function copyMondayToWeekdays() {
   alert(`Copied ${addedCount} classes to weekdays. ${skippedCount > 0 ? `Skipped ${skippedCount} due to clashes.` : ''}`);
 }
 
+// Copy single class to another day (mobile-friendly)
+function showCopyClassDialog(classIndex) {
+  const cls = classes[classIndex];
+  const currentDay = cls.day;
+
+  // Build options for available days
+  const availableDays = DAYS.filter(day => day !== currentDay);
+  const dayOptions = availableDays.map((day, i) => `${i + 1} - ${day}`).join('\n');
+
+  const choice = prompt(
+    `Copy "${cls.student}" (${formatTime(cls.start)} - ${formatTime(cls.end)}) to:\n\n` +
+    `${dayOptions}\n\n` +
+    `Enter number (1-${availableDays.length}) or 0 to cancel:`
+  );
+
+  if (!choice || choice === '0') return;
+
+  const dayIndex = parseInt(choice) - 1;
+  if (isNaN(dayIndex) || dayIndex < 0 || dayIndex >= availableDays.length) {
+    alert('Invalid selection');
+    return;
+  }
+
+  const targetDay = availableDays[dayIndex];
+  const newClass = { ...cls, day: targetDay };
+
+  // Remove cancel status when copying
+  delete newClass.cancelled;
+  delete newClass.cancelReason;
+  delete newClass.cancelledAt;
+  delete newClass.customCancelReason;
+
+  if (hasClash(newClass)) {
+    alert(`Cannot copy to ${targetDay} - time clash detected!`);
+    return;
+  }
+
+  classes.push(newClass);
+  saveClasses();
+  renderWeekGrid();
+  updateStudentDropdowns();
+
+  showToast(`Copied ${cls.student}'s class to ${targetDay}`);
+}
+
 // Render Week Grid with Drag and Drop
 function renderWeekGrid() {
   weekGrid.innerHTML = "";
@@ -408,9 +454,12 @@ function renderWeekGrid() {
                   <div class="class-card ${hasClash ? 'clash' : ''} ${isCancelled ? 'cancelled' : ''}"
                        data-index="${globalIndex}"
                        draggable="${!isCancelled}">
-                    <div class="student-name">${escapeHtml(c.student)}</div>
-                    <div class="class-time">${formatTime(c.start)} - ${formatTime(c.end)}</div>
-                    ${isCancelled ? `<div class="cancel-badge">${cancelLabel}</div>` : ''}
+                    <div class="class-card-content">
+                      <div class="student-name">${escapeHtml(c.student)}</div>
+                      <div class="class-time">${formatTime(c.start)} - ${formatTime(c.end)}</div>
+                      ${isCancelled ? `<div class="cancel-badge">${cancelLabel}</div>` : ''}
+                    </div>
+                    ${!isCancelled ? `<button class="copy-class-btn" data-index="${globalIndex}" title="Copy to another day">⧉</button>` : ''}
                   </div>
                 `;
               }).join("")
@@ -421,15 +470,24 @@ function renderWeekGrid() {
     // Add click listeners to class cards
     dayColumn.querySelectorAll(".class-card").forEach(card => {
       card.addEventListener("click", (e) => {
-        // Don't open modal if we just finished dragging
-        if (!card.classList.contains("dragging")) {
-          openEditModal(parseInt(card.dataset.index));
+        // Don't open modal if clicking copy button or if we just finished dragging
+        if (e.target.classList.contains("copy-class-btn") || card.classList.contains("dragging")) {
+          return;
         }
+        openEditModal(parseInt(card.dataset.index));
       });
 
       // Drag events
       card.addEventListener("dragstart", handleDragStart);
       card.addEventListener("dragend", handleDragEnd);
+    });
+
+    // Add click listeners to copy buttons
+    dayColumn.querySelectorAll(".copy-class-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        showCopyClassDialog(parseInt(btn.dataset.index));
+      });
     });
 
     // Drop zone events
@@ -1293,13 +1351,17 @@ function renderReport() {
   const tbody = document.getElementById("studentReportBody");
   const students = Object.keys(studentStats).sort();
 
+  let totalAmount = 0;
+
   if (students.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #9ca3af; padding: 24px;">No classes found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9ca3af; padding: 24px;">No classes found</td></tr>';
   } else {
     tbody.innerHTML = students.map(student => {
       const stats = studentStats[student];
       const hours = (stats.minutes / 60).toFixed(1);
-      const amount = Math.round((stats.minutes / 60) * hourlyRate);
+      const rate = studentRates[student] || defaultRate;
+      const amount = Math.round((stats.minutes / 60) * rate);
+      totalAmount += amount;
 
       return `
         <tr>
@@ -1307,15 +1369,32 @@ function renderReport() {
           <td>${stats.total - stats.cancelled}</td>
           <td class="cancelled-count">${stats.cancelled > 0 ? stats.cancelled : '-'}</td>
           <td>${hours}</td>
+          <td>
+            <input type="number" class="student-rate-input"
+                   data-student="${escapeHtml(student)}"
+                   value="${rate}"
+                   min="0" step="50" />
+          </td>
           <td class="amount">₹${amount.toLocaleString()}</td>
         </tr>
       `;
     }).join('');
+
+    // Add event listeners to rate inputs
+    tbody.querySelectorAll('.student-rate-input').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const student = e.target.dataset.student;
+        const newRate = parseInt(e.target.value) || 0;
+        studentRates[student] = newRate;
+        localStorage.setItem('studentRates', JSON.stringify(studentRates));
+        renderReport();
+      });
+    });
   }
 
   // Update footer totals
   document.getElementById("footerClasses").textContent = completedCount;
   document.getElementById("footerCancelled").textContent = cancelledCount;
   document.getElementById("footerHours").textContent = totalHours;
-  document.getElementById("footerAmount").textContent = `₹${Math.round((totalMinutes / 60) * hourlyRate).toLocaleString()}`;
+  document.getElementById("footerAmount").textContent = `₹${totalAmount.toLocaleString()}`;
 }

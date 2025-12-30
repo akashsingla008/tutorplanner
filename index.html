@@ -38,7 +38,8 @@
   </div>
 
   <div id="dragHint" class="drag-hint hidden">
-    Drag classes to move • Hold Ctrl/Cmd to copy
+    <span class="desktop-hint">Drag to move • Ctrl/Cmd+drag to copy</span>
+    <span class="mobile-hint">Tap class to edit • Use copy button to duplicate</span>
   </div>
 
   <div id="weekGrid" class="week-grid">
@@ -109,6 +110,7 @@
           <th>Classes</th>
           <th>Cancelled</th>
           <th>Hours</th>
+          <th>Rate (₹/hr)</th>
           <th>Amount</th>
         </tr>
       </thead>
@@ -121,6 +123,7 @@
           <td id="footerClasses">0</td>
           <td id="footerCancelled">0</td>
           <td id="footerHours">0</td>
+          <td>-</td>
           <td id="footerAmount">-</td>
         </tr>
       </tfoot>
@@ -128,8 +131,9 @@
   </div>
 
   <div class="rate-setting">
-    <label for="hourlyRate">Hourly Rate (₹):</label>
-    <input type="number" id="hourlyRate" value="500" min="0" step="50" />
+    <label for="defaultRate">Default Rate (₹/hr):</label>
+    <input type="number" id="defaultRate" value="500" min="0" step="50" />
+    <span class="rate-hint">Set individual rates in table above</span>
   </div>
 </main>
 
