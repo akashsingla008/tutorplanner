@@ -61,6 +61,8 @@ const endTimeInput = document.getElementById("endTime");
 document.addEventListener("DOMContentLoaded", init);
 
 function init() {
+  migrateClassesToDateFormat();
+  cleanupOldClasses();
   renderWeekGrid();
   setupEventListeners();
   updateStudentDropdowns();
@@ -68,6 +70,70 @@ function init() {
   checkAndCreateBackup();
   initNotifications();
   startClassReminderCheck();
+}
+
+// Migrate existing classes to include date field
+function migrateClassesToDateFormat() {
+  let needsMigration = false;
+  const currentWeekStart = getWeekStartDate(0);
+
+  classes.forEach((cls) => {
+    if (!cls.date) {
+      needsMigration = true;
+      // Assign date based on day name for current week
+      const dayIndex = DAYS.indexOf(cls.day);
+      if (dayIndex !== -1) {
+        const classDate = new Date(currentWeekStart);
+        classDate.setDate(currentWeekStart.getDate() + dayIndex);
+        cls.date = classDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      }
+    }
+  });
+
+  if (needsMigration) {
+    saveClasses();
+    console.log('Migrated classes to date-based format');
+  }
+}
+
+// Clean up classes older than 3 months (with automatic backup)
+function cleanupOldClasses() {
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  const cutoffDate = threeMonthsAgo.toISOString().split('T')[0];
+
+  // Find old classes
+  const oldClasses = classes.filter(cls => cls.date && cls.date < cutoffDate);
+
+  if (oldClasses.length === 0) {
+    return; // Nothing to clean up
+  }
+
+  // Create backup before cleanup
+  const cleanupBackup = {
+    timestamp: new Date().toISOString(),
+    reason: 'auto-cleanup-3months',
+    cutoffDate: cutoffDate,
+    classesRemoved: oldClasses.length,
+    classes: oldClasses,
+    allClasses: classes,
+    studentRates: studentRates,
+    paymentStatus: paymentStatus,
+    defaultRate: defaultRate
+  };
+
+  // Store cleanup backup separately
+  let cleanupBackups = JSON.parse(localStorage.getItem('cleanupBackups')) || [];
+  cleanupBackups.unshift(cleanupBackup);
+  // Keep only last 6 cleanup backups (covering 18 months of history)
+  cleanupBackups = cleanupBackups.slice(0, 6);
+  localStorage.setItem('cleanupBackups', JSON.stringify(cleanupBackups));
+
+  // Remove old classes
+  classes = classes.filter(cls => !cls.date || cls.date >= cutoffDate);
+  saveClasses();
+
+  console.log(`Cleaned up ${oldClasses.length} classes older than ${cutoffDate}. Backup created.`);
 }
 
 // Event Listeners Setup
@@ -396,21 +462,47 @@ function showCopyWeekDialog() {
 }
 
 function copyAllToNextWeek() {
-  const newClasses = classes.map(c => ({ ...c }));
+  // Get classes from current week only
+  const currentWeekStart = getWeekStartDate(currentWeekOffset);
+  const currentWeekEnd = new Date(currentWeekStart);
+  currentWeekEnd.setDate(currentWeekStart.getDate() + 6);
+  const currentWeekClasses = getClassesInRange(currentWeekStart, currentWeekEnd);
+
+  if (currentWeekClasses.length === 0) {
+    alert("No classes in this week to copy.");
+    return;
+  }
+
+  const nextWeekStart = getWeekStartDate(currentWeekOffset + 1);
   let addedCount = 0;
   let skippedCount = 0;
 
-  newClasses.forEach(cls => {
-    // Check if this exact class already exists
+  currentWeekClasses.forEach(cls => {
+    // Calculate new date for next week
+    const dayIndex = DAYS.indexOf(cls.day);
+    const newDate = new Date(nextWeekStart);
+    newDate.setDate(nextWeekStart.getDate() + dayIndex);
+    const newDateStr = newDate.toISOString().split('T')[0];
+
+    const newClass = {
+      ...cls,
+      date: newDateStr,
+      cancelled: false,
+      cancelReason: undefined,
+      pendingConfirmation: false,
+      completedDate: undefined
+    };
+
+    // Check if this exact class already exists for that date
     const exists = classes.some(c =>
-      c.student === cls.student &&
-      c.day === cls.day &&
-      c.start === cls.start &&
-      c.end === cls.end
+      c.student === newClass.student &&
+      c.date === newClass.date &&
+      c.start === newClass.start &&
+      c.end === newClass.end
     );
 
-    if (!exists && !hasClash(cls)) {
-      classes.push(cls);
+    if (!exists && !hasClash(newClass)) {
+      classes.push(newClass);
       addedCount++;
     } else {
       skippedCount++;
@@ -420,14 +512,17 @@ function copyAllToNextWeek() {
   saveClasses();
   renderWeekGrid();
 
-  alert(`Copied ${addedCount} classes. ${skippedCount > 0 ? `Skipped ${skippedCount} due to duplicates or clashes.` : ''}`);
+  alert(`Copied ${addedCount} classes to next week. ${skippedCount > 0 ? `Skipped ${skippedCount} due to duplicates or clashes.` : ''}`);
 }
 
 function copyMondayToWeekdays() {
-  const mondayClasses = classes.filter(c => c.day === "Monday");
+  // Get Monday of current displayed week
+  const currentWeekStart = getWeekStartDate(currentWeekOffset);
+  const mondayDateStr = currentWeekStart.toISOString().split('T')[0];
+  const mondayClasses = classes.filter(c => c.date === mondayDateStr);
 
   if (mondayClasses.length === 0) {
-    alert("No Monday classes to copy.");
+    alert("No Monday classes in this week to copy.");
     return;
   }
 
@@ -436,8 +531,20 @@ function copyMondayToWeekdays() {
   let skippedCount = 0;
 
   mondayClasses.forEach(mondayClass => {
-    targetDays.forEach(day => {
-      const newClass = { ...mondayClass, day };
+    targetDays.forEach((day, dayOffset) => {
+      // Calculate date for target day (Tue=1, Wed=2, Thu=3, Fri=4 offset from Monday)
+      const targetDate = new Date(currentWeekStart);
+      targetDate.setDate(currentWeekStart.getDate() + dayOffset + 1);
+      const targetDateStr = targetDate.toISOString().split('T')[0];
+
+      const newClass = {
+        ...mondayClass,
+        day,
+        date: targetDateStr,
+        cancelled: false,
+        cancelReason: undefined,
+        pendingConfirmation: false
+      };
 
       // Check for clashes
       if (!hasClash(newClass)) {
@@ -479,13 +586,22 @@ function showCopyClassDialog(classIndex) {
   }
 
   const targetDay = availableDays[dayIndex];
-  const newClass = { ...cls, day: targetDay };
+
+  // Calculate the date for the target day within the current week
+  const weekStart = getWeekStartDate(currentWeekOffset);
+  const targetDayIndex = DAYS.indexOf(targetDay);
+  const targetDate = new Date(weekStart);
+  targetDate.setDate(weekStart.getDate() + targetDayIndex);
+  const targetDateStr = targetDate.toISOString().split('T')[0];
+
+  const newClass = { ...cls, day: targetDay, date: targetDateStr };
 
   // Remove cancel status when copying
   delete newClass.cancelled;
   delete newClass.cancelReason;
   delete newClass.cancelledAt;
   delete newClass.customCancelReason;
+  delete newClass.pendingConfirmation;
 
   if (hasClash(newClass)) {
     alert(`Cannot copy to ${targetDay} - time clash detected!`);
@@ -518,12 +634,14 @@ function renderWeekGrid() {
   DAYS.forEach((day, index) => {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + index);
+    const dateStr = date.toISOString().split('T')[0];
 
     const dayColumn = document.createElement("div");
     dayColumn.className = "day-column";
     dayColumn.dataset.day = day;
 
-    const dayClasses = classes.filter(c => c.day === day);
+    // Filter classes by actual date (not just day name)
+    const dayClasses = classes.filter(c => c.date === dateStr);
     const clashingIndices = findClashingClasses(dayClasses);
 
     dayColumn.innerHTML = `
@@ -736,7 +854,14 @@ function handleDrop(e) {
   const draggedClass = classes[draggedClassIndex];
   if (!draggedClass) return;
 
-  const newClass = { ...draggedClass, day: targetDay };
+  // Calculate the date for the target day within the current week
+  const weekStart = getWeekStartDate(currentWeekOffset);
+  const targetDayIndex = DAYS.indexOf(targetDay);
+  const targetDate = new Date(weekStart);
+  targetDate.setDate(weekStart.getDate() + targetDayIndex);
+  const targetDateStr = targetDate.toISOString().split('T')[0];
+
+  const newClass = { ...draggedClass, day: targetDay, date: targetDateStr };
 
   // Check for clash
   const excludeIndex = isCopyDrag ? null : draggedClassIndex;
@@ -746,7 +871,10 @@ function handleDrop(e) {
   }
 
   if (isCopyDrag) {
-    // Copy the class
+    // Copy the class - remove status flags
+    delete newClass.cancelled;
+    delete newClass.cancelReason;
+    delete newClass.pendingConfirmation;
     classes.push(newClass);
     showToast(`Copied ${draggedClass.student}'s class to ${targetDay}`);
   } else {
@@ -1039,13 +1167,21 @@ function handleCopyToDays() {
     return;
   }
 
+  const weekStart = getWeekStartDate(currentWeekOffset);
   let addedCount = 0;
   let skippedCount = 0;
 
   selectedDays.forEach(day => {
+    // Calculate date for target day
+    const dayIndex = DAYS.indexOf(day);
+    const targetDate = new Date(weekStart);
+    targetDate.setDate(weekStart.getDate() + dayIndex);
+    const targetDateStr = targetDate.toISOString().split('T')[0];
+
     const newClass = {
       student: studentName,
       day,
+      date: targetDateStr,
       start,
       end
     };
@@ -1084,9 +1220,16 @@ function handleFormSubmit(e) {
     return;
   }
 
+  // Calculate the actual date for this class based on selected day and current week offset
+  const weekStart = getWeekStartDate(currentWeekOffset);
+  const dayIndex = DAYS.indexOf(daySelect.value);
+  const classDate = new Date(weekStart);
+  classDate.setDate(weekStart.getDate() + dayIndex);
+
   const cls = {
     student: studentName,
     day: daySelect.value,
+    date: classDate.toISOString().split('T')[0], // YYYY-MM-DD format
     start: startTimeInput.value,
     end: endTimeInput.value
   };
@@ -1387,7 +1530,9 @@ function hasClash(newClass, excludeIndex = null) {
   return classes.some((c, i) => {
     if (excludeIndex !== null && i === excludeIndex) return false;
     if (c.cancelled) return false; // Cancelled classes don't cause clashes
-    return c.day === newClass.day && timesOverlap(newClass, c);
+    // Check by date if available, otherwise fall back to day name
+    const sameDay = newClass.date ? c.date === newClass.date : c.day === newClass.day;
+    return sameDay && timesOverlap(newClass, c);
   });
 }
 
@@ -1402,7 +1547,14 @@ function checkFormClash() {
     return;
   }
 
-  const testClass = { day, start, end };
+  // Calculate date for the selected day in current week
+  const weekStart = getWeekStartDate(currentWeekOffset);
+  const dayIndex = DAYS.indexOf(day);
+  const classDate = new Date(weekStart);
+  classDate.setDate(weekStart.getDate() + dayIndex);
+  const dateStr = classDate.toISOString().split('T')[0];
+
+  const testClass = { day, date: dateStr, start, end };
 
   if (hasClash(testClass, editingIndex)) {
     formClashWarning.classList.remove("hidden");
@@ -1664,10 +1816,13 @@ function formatDateLong(date) {
 }
 
 function getClassesInRange(startDate, endDate) {
-  // Since we don't store actual dates, we need to match by day name
-  // For a proper implementation, you'd want to store actual dates with classes
-  // For now, we'll return all classes (simulating current week/month)
-  return classes;
+  const startStr = startDate.toISOString().split('T')[0];
+  const endStr = endDate.toISOString().split('T')[0];
+
+  return classes.filter(cls => {
+    if (!cls.date) return false;
+    return cls.date >= startStr && cls.date <= endStr;
+  });
 }
 
 function renderReport() {
@@ -2214,7 +2369,7 @@ function createAutoBackup() {
 function exportData() {
   const exportData = {
     exportDate: new Date().toISOString(),
-    version: '2.0', // Updated for new class properties: pendingConfirmation, pendingSince, allowedClash
+    version: '3.0', // v3.0: Added date field to classes for proper week/month tracking
     data: {
       classes: classes,
       studentRates: studentRates,
@@ -2262,6 +2417,9 @@ function importData(file) {
         localStorage.setItem('studentRates', JSON.stringify(studentRates));
         localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
         localStorage.setItem('defaultRate', defaultRate);
+
+        // Migrate imported classes to include date field if missing
+        migrateClassesToDateFormat();
 
         // Refresh UI
         renderWeekGrid();
