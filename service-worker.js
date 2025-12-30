@@ -1,4 +1,4 @@
-const CACHE_NAME = "mindful-maths-v21";
+const CACHE_NAME = "mindful-maths-v22";
 
 const FILES_TO_CACHE = [
   "/",

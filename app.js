@@ -1825,6 +1825,96 @@ function renderReport() {
   document.getElementById("footerPayment").innerHTML = pendingAmount > 0
     ? `<span class="pending-indicator">₹${pendingAmount.toLocaleString()} pending</span>`
     : '<span class="paid-indicator">All Paid ✓</span>';
+
+  // Render earnings chart
+  renderEarningsChart(classesInRange, studentStats, periodKey, isClassCompleted);
+}
+
+// Render earnings chart
+function renderEarningsChart(classesInRange, _studentStats, periodKey, isClassCompleted) {
+  const chartContainer = document.getElementById('earningsChart');
+  if (!chartContainer) return;
+
+  // Calculate per-day earnings
+  const dayEarnings = {};
+  const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  // Initialize all days
+  dayOrder.forEach(day => {
+    dayEarnings[day] = { paid: 0, completed: 0, upcoming: 0 };
+  });
+
+  // Calculate earnings for each class by day
+  classesInRange.forEach(cls => {
+    if (cls.cancelled) return;
+
+    const rate = studentRates[cls.student] || defaultRate;
+    const minutes = getMinutesBetween(cls.start, cls.end);
+    const amount = Math.round((minutes / 60) * rate);
+
+    if (cls.pendingConfirmation) {
+      dayEarnings[cls.day].upcoming += amount;
+    } else if (isClassCompleted(cls)) {
+      // Check if this student's payment is marked as paid for this period
+      const paymentKey = `${cls.student}_${periodKey}`;
+      if (paymentStatus[paymentKey]) {
+        dayEarnings[cls.day].paid += amount;
+      } else {
+        dayEarnings[cls.day].completed += amount;
+      }
+    } else {
+      dayEarnings[cls.day].upcoming += amount;
+    }
+  });
+
+  // Calculate totals for the chart header
+  let totalPaid = 0, totalCompleted = 0, totalUpcoming = 0;
+  dayOrder.forEach(day => {
+    totalPaid += dayEarnings[day].paid;
+    totalCompleted += dayEarnings[day].completed;
+    totalUpcoming += dayEarnings[day].upcoming;
+  });
+
+  // Update chart header
+  const totalEarned = totalPaid + totalCompleted;
+  document.getElementById('chartTotalEarnings').textContent = `₹${totalEarned.toLocaleString()}`;
+  document.getElementById('chartPendingEarnings').textContent =
+    totalCompleted > 0 ? `(₹${totalCompleted.toLocaleString()} unpaid)` : '';
+
+  // Find max for scaling
+  const maxEarning = Math.max(
+    ...dayOrder.map(day =>
+      dayEarnings[day].paid + dayEarnings[day].completed + dayEarnings[day].upcoming
+    ),
+    100 // Minimum scale
+  );
+
+  // Render bars
+  chartContainer.innerHTML = dayOrder.map(day => {
+    const earnings = dayEarnings[day];
+    const total = earnings.paid + earnings.completed + earnings.upcoming;
+    const paidHeight = (earnings.paid / maxEarning) * 100;
+    const completedHeight = (earnings.completed / maxEarning) * 100;
+    const upcomingHeight = (earnings.upcoming / maxEarning) * 100;
+
+    // Determine today for highlighting
+    const today = new Date();
+    const dayIndex = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
+    const isToday = dayIndex[day] === today.getDay();
+
+    return `
+      <div class="chart-bar-group ${isToday ? 'today' : ''}">
+        <div class="chart-bar-stack" title="₹${total.toLocaleString()}">
+          ${earnings.upcoming > 0 ? `<div class="chart-bar upcoming" style="height: ${upcomingHeight}%"></div>` : ''}
+          ${earnings.completed > 0 ? `<div class="chart-bar completed" style="height: ${completedHeight}%"></div>` : ''}
+          ${earnings.paid > 0 ? `<div class="chart-bar paid" style="height: ${paidHeight}%"></div>` : ''}
+          ${total === 0 ? '<div class="chart-bar empty"></div>' : ''}
+        </div>
+        <div class="chart-bar-label">${day.substring(0, 3)}</div>
+        <div class="chart-bar-amount">${total > 0 ? `₹${total.toLocaleString()}` : '-'}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 // Send payment reminder

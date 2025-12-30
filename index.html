@@ -132,6 +132,23 @@
     </div>
   </div>
 
+  <div class="earnings-chart-container">
+    <h3>Weekly Earnings</h3>
+    <div class="earnings-total">
+      <span class="earnings-label">Total Earned:</span>
+      <span class="earnings-value" id="chartTotalEarnings">₹0</span>
+      <span class="earnings-pending" id="chartPendingEarnings">(₹0 pending)</span>
+    </div>
+    <div class="earnings-chart" id="earningsChart">
+      <!-- Bars will be rendered dynamically -->
+    </div>
+    <div class="earnings-legend">
+      <div class="legend-item"><span class="legend-color paid"></span> Paid</div>
+      <div class="legend-item"><span class="legend-color completed"></span> Completed (Unpaid)</div>
+      <div class="legend-item"><span class="legend-color upcoming"></span> Upcoming</div>
+    </div>
+  </div>
+
   <div class="report-table-container">
     <h3>Classes by Student</h3>
     <table class="report-table" id="studentReportTable">
