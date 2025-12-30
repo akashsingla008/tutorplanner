@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate PWA Icons</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+    h1 { color: #3d8fc4; }
+    .step { background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 8px; }
+    .step h3 { margin-top: 0; color: #333; }
+    canvas { border: 1px solid #ddd; margin: 10px 0; }
+    button { background: #3d8fc4; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; margin: 5px; }
+    button:hover { background: #2d7ab8; }
+    .preview { display: flex; gap: 20px; flex-wrap: wrap; }
+    .preview div { text-align: center; }
+    input[type="file"] { margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>Generate Mindful Maths PWA Icons</h1>
+
+  <div class="step">
+    <h3>Step 1: Upload your logo image</h3>
+    <input type="file" id="logoInput" accept="image/*">
+    <p>Select the Mindful Maths logo image file</p>
+  </div>
+
+  <div class="step">
+    <h3>Step 2: Preview & Download Icons</h3>
+    <div class="preview">
+      <div>
+        <p>512x512 Icon</p>
+        <canvas id="canvas512" width="512" height="512"></canvas>
+        <br>
+        <button onclick="download512()">Download icon-512.png</button>
+      </div>
+      <div>
+        <p>192x192 Icon</p>
+        <canvas id="canvas192" width="192" height="192"></canvas>
+        <br>
+        <button onclick="download192()">Download icon-192.png</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <h3>Step 3: Save the icons</h3>
+    <p>After downloading both icons, save them to the <code>icons/</code> folder in your project:</p>
+    <ul>
+      <li><code>icons/icon-512.png</code></li>
+      <li><code>icons/icon-192.png</code></li>
+    </ul>
+    <p>Then push the changes to GitHub and reinstall the PWA on your phone.</p>
+  </div>
+
+  <script>
+    const canvas512 = document.getElementById('canvas512');
+    const canvas192 = document.getElementById('canvas192');
+    const ctx512 = canvas512.getContext('2d');
+    const ctx192 = canvas192.getContext('2d');
+
+    // Draw placeholder
+    function drawPlaceholder(ctx, size) {
+      ctx.fillStyle = '#3d8fc4';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = 'white';
+      ctx.font = `${size/10}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText('Upload Logo', size/2, size/2);
+    }
+
+    drawPlaceholder(ctx512, 512);
+    drawPlaceholder(ctx192, 192);
+
+    document.getElementById('logoInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const img = new Image();
+      img.onload = function() {
+        // Clear canvases
+        ctx512.clearRect(0, 0, 512, 512);
+        ctx192.clearRect(0, 0, 192, 192);
+
+        // Fill with white background
+        ctx512.fillStyle = 'white';
+        ctx512.fillRect(0, 0, 512, 512);
+        ctx192.fillStyle = 'white';
+        ctx192.fillRect(0, 0, 192, 192);
+
+        // Calculate aspect ratio to fit image
+        const ratio = Math.min(512 / img.width, 512 / img.height);
+        const w512 = img.width * ratio;
+        const h512 = img.height * ratio;
+        const x512 = (512 - w512) / 2;
+        const y512 = (512 - h512) / 2;
+
+        const ratio192 = Math.min(192 / img.width, 192 / img.height);
+        const w192 = img.width * ratio192;
+        const h192 = img.height * ratio192;
+        const x192 = (192 - w192) / 2;
+        const y192 = (192 - h192) / 2;
+
+        // Draw images
+        ctx512.drawImage(img, x512, y512, w512, h512);
+        ctx192.drawImage(img, x192, y192, w192, h192);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+
+    function download512() {
+      const link = document.createElement('a');
+      link.download = 'icon-512.png';
+      link.href = canvas512.toDataURL('image/png');
+      link.click();
+    }
+
+    function download192() {
+      const link = document.createElement('a');
+      link.download = 'icon-192.png';
+      link.href = canvas192.toDataURL('image/png');
+      link.click();
+    }
+  </script>
+</body>
+</html>
