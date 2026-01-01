@@ -382,7 +382,7 @@
 
 <script>
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("service-worker.js")
+    navigator.serviceWorker.register("/service-worker.js", { scope: "/" })
       .then(registration => {
         console.log("SW registered:", registration.scope);
         // Check for updates
@@ -390,6 +390,7 @@
       })
       .catch(error => {
         console.error("SW registration failed:", error);
+        alert("SW Error: " + error.message);
       });
   }
 </script>
