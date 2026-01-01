@@ -2049,6 +2049,7 @@ header .subtitle {
 
 /* Header Icon Buttons */
 .header-icon-btn {
+  position: relative;
   width: 36px;
   height: 36px;
   border: none;

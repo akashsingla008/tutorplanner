@@ -3315,6 +3315,9 @@ let achievements = safeJsonParse('achievements', {
   totalEarnings: 0
 });
 
+// Flag to suppress celebrations during initial load
+let celebrationsInitialized = false;
+
 // Initialize celebrations system
 function initCelebrations() {
   // Update streak on app load
@@ -3330,8 +3333,13 @@ function initCelebrations() {
     if (e.target.id === 'achievementsModal') closeAchievementsModal();
   });
 
-  // Check for new badges based on current state
-  checkAllBadges();
+  // Check for badges silently on init (don't show popups)
+  checkAllBadges(true);
+
+  // After init, enable celebrations
+  celebrationsInitialized = true;
+
+  console.log('Celebrations initialized. Streak:', achievements.streak, 'Badges:', achievements.badges);
 }
 
 // Confetti Animation
@@ -3403,29 +3411,38 @@ function updateStreak() {
   const today = new Date().toISOString().split('T')[0];
   const lastActive = achievements.lastActiveDate;
 
+  console.log('Updating streak. Today:', today, 'Last active:', lastActive, 'Current streak:', achievements.streak);
+
   if (!lastActive) {
     // First time using app
     achievements.streak = 1;
     achievements.lastActiveDate = today;
+    console.log('First time user - streak set to 1');
   } else if (lastActive === today) {
-    // Already counted today
+    // Already counted today - do nothing but ensure streak is at least 1
+    if (achievements.streak < 1) achievements.streak = 1;
+    console.log('Already active today - streak unchanged:', achievements.streak);
     return;
   } else {
-    const lastDate = new Date(lastActive);
-    const todayDate = new Date(today);
-    const diffDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+    const lastDate = new Date(lastActive + 'T00:00:00');
+    const todayDate = new Date(today + 'T00:00:00');
+    const diffDays = Math.round((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+
+    console.log('Days since last active:', diffDays);
 
     if (diffDays === 1) {
       // Consecutive day - increase streak
       achievements.streak++;
       achievements.lastActiveDate = today;
+      console.log('Consecutive day! New streak:', achievements.streak);
 
-      // Check for streak badges
+      // Check for streak badges (these will show celebration since celebrationsInitialized will be true after init)
       if (achievements.streak === 3) awardBadge('streak3');
       if (achievements.streak === 7) awardBadge('streak7');
       if (achievements.streak === 30) awardBadge('streak30');
     } else if (diffDays > 1) {
       // Streak broken - reset
+      console.log('Streak broken! Resetting from', achievements.streak, 'to 1');
       achievements.streak = 1;
       achievements.lastActiveDate = today;
     }
@@ -3446,15 +3463,17 @@ function updateHeaderStreakBadge() {
 }
 
 // Award a badge
-function awardBadge(badgeId) {
+function awardBadge(badgeId, silent = false) {
   if (achievements.badges.includes(badgeId)) return; // Already have it
 
   achievements.badges.push(badgeId);
   saveAchievements();
 
-  // Show celebration
+  console.log('Badge awarded:', badgeId, 'Silent:', silent);
+
+  // Show celebration only if not silent and celebrations are initialized
   const badge = BADGES[badgeId];
-  if (badge) {
+  if (badge && !silent && celebrationsInitialized) {
     showAchievementPopup(badge.icon, badge.name);
     launchConfetti();
   }
@@ -3552,33 +3571,33 @@ function saveAchievements() {
 }
 
 // Check all badges based on current state
-function checkAllBadges() {
+function checkAllBadges(silent = false) {
   const uniqueStudents = [...new Set(classes.map(c => c.student))];
   const completedClasses = classes.filter(c => !c.cancelled && !c.pendingConfirmation && isClassCompleted(c));
 
   // First class
-  if (classes.length > 0) awardBadge('firstClass');
+  if (classes.length > 0) awardBadge('firstClass', silent);
 
   // Class milestones
-  if (completedClasses.length >= 10) awardBadge('tenClasses');
-  if (completedClasses.length >= 50) awardBadge('fiftyClasses');
-  if (completedClasses.length >= 100) awardBadge('hundredClasses');
+  if (completedClasses.length >= 10) awardBadge('tenClasses', silent);
+  if (completedClasses.length >= 50) awardBadge('fiftyClasses', silent);
+  if (completedClasses.length >= 100) awardBadge('hundredClasses', silent);
 
   // Student milestones
-  if (uniqueStudents.length >= 1) awardBadge('firstStudent');
-  if (uniqueStudents.length >= 5) awardBadge('fiveStudents');
+  if (uniqueStudents.length >= 1) awardBadge('firstStudent', silent);
+  if (uniqueStudents.length >= 5) awardBadge('fiveStudents', silent);
 
   // Check for early bird / night owl
   classes.forEach(c => {
     const startHour = parseInt(c.start.split(':')[0]);
-    if (startHour < 8) awardBadge('earlyBird');
-    if (startHour >= 20) awardBadge('nightOwl');
+    if (startHour < 8) awardBadge('earlyBird', silent);
+    if (startHour >= 20) awardBadge('nightOwl', silent);
   });
 
   // Check payment badges
   const paidCount = Object.values(paymentStatus).filter(v => v === true).length;
-  if (paidCount >= 1) awardBadge('firstPayment');
-  if (paidCount >= 10) awardBadge('tenPayments');
+  if (paidCount >= 1) awardBadge('firstPayment', silent);
+  if (paidCount >= 10) awardBadge('tenPayments', silent);
 }
 
 // Celebration for payment received
