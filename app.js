@@ -3410,10 +3410,86 @@ function initCelebrations() {
 
   console.log('Celebrations initialized. Streak:', achievements.streak, 'Badges:', achievements.badges);
 
-  // Auto-show achievements modal on app load (brief flash)
+  // Show welcome back popup on app load
+  setTimeout(() => {
+    showWelcomePopup();
+  }, 500);
+
+  // Show achievements modal after welcome popup (user can still access via button)
   setTimeout(() => {
     showAchievementsModal();
-  }, 500);
+  }, 1000);
+}
+
+// Motivational messages for the welcome popup
+const MOTIVATIONAL_MESSAGES = [
+  "Every class you teach shapes a brighter future! ✨",
+  "Your dedication makes a difference every day! 💪",
+  "Small steps lead to big achievements! 🚀",
+  "You're not just teaching math, you're building confidence! 🌟",
+  "Today is another chance to inspire! 💡",
+  "Your patience and care change lives! 💖",
+  "Keep shining - your students look up to you! ⭐",
+  "Every problem solved is a victory! 🎯",
+  "You make learning fun and meaningful! 🎨",
+  "Your hard work is creating future leaders! 👑",
+  "Believe in yourself as much as your students do! 🌈",
+  "Teaching is the greatest act of optimism! 🌻",
+  "You're making math magical! ✨",
+  "One class at a time, you're changing the world! 🌍",
+  "Your energy and passion are contagious! 🔥"
+];
+
+// Show welcome back popup
+function showWelcomePopup() {
+  // Get a random motivational message
+  const message = MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)];
+
+  // Get time-based greeting
+  const hour = new Date().getHours();
+  let greeting;
+  if (hour < 12) {
+    greeting = "Good Morning";
+  } else if (hour < 17) {
+    greeting = "Good Afternoon";
+  } else {
+    greeting = "Good Evening";
+  }
+
+  // Create popup element
+  const popup = document.createElement('div');
+  popup.className = 'welcome-popup';
+  popup.innerHTML = `
+    <div class="welcome-popup-content">
+      <div class="welcome-emoji">👋</div>
+      <h2 class="welcome-greeting">${greeting}, Mahak!</h2>
+      <p class="welcome-message">${message}</p>
+      <div class="welcome-stats">
+        <span class="welcome-stat">🔥 ${achievements.streak} day streak</span>
+        <span class="welcome-stat">🏆 ${achievements.badges.length} badges</span>
+      </div>
+      <button class="welcome-close-btn">Let's Go!</button>
+    </div>
+  `;
+
+  document.body.appendChild(popup);
+
+  // Animate in
+  setTimeout(() => popup.classList.add('show'), 10);
+
+  // Close button handler
+  popup.querySelector('.welcome-close-btn').addEventListener('click', () => {
+    popup.classList.remove('show');
+    setTimeout(() => popup.remove(), 300);
+  });
+
+  // Also close on backdrop click
+  popup.addEventListener('click', (e) => {
+    if (e.target === popup) {
+      popup.classList.remove('show');
+      setTimeout(() => popup.remove(), 300);
+    }
+  });
 }
 
 // Confetti Animation
