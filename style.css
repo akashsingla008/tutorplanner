@@ -2461,6 +2461,82 @@ header .subtitle {
   transform: scale(0.98);
 }
 
+/* Notification Permission Dialog (mobile-friendly) */
+.notification-permission-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.3s ease;
+  padding: 20px;
+}
+
+.notification-permission-content {
+  background: white;
+  border-radius: 20px;
+  padding: 24px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.notification-permission-content h3 {
+  margin: 0 0 12px;
+  font-size: 22px;
+  color: #1f2937;
+}
+
+.notification-permission-content p {
+  margin: 0 0 20px;
+  color: #4b5563;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.notification-permission-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.notification-permission-buttons button {
+  flex: 1;
+  padding: 14px 20px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.notification-permission-buttons .btn-enable {
+  background: linear-gradient(135deg, #3d8fc4 0%, #2d7eb3 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(61, 143, 196, 0.4);
+}
+
+.notification-permission-buttons .btn-enable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(61, 143, 196, 0.5);
+}
+
+.notification-permission-buttons .btn-skip {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.notification-permission-buttons .btn-skip:hover {
+  background: #e5e7eb;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

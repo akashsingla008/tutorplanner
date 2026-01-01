@@ -3022,90 +3022,64 @@ function initNotifications() {
 
 // Test notification - to verify notifications are working
 function testNotification() {
-  // Check if Notification API exists
   if (!('Notification' in window)) {
-    showInAppAlert('Not Supported', 'Notifications are not supported on this device/browser.');
+    showInAppAlert('Test', 'Notifications not supported on this device');
     return;
   }
 
-  // Check if Service Worker is available
-  if (!('serviceWorker' in navigator)) {
-    showInAppAlert('Not Supported', 'Service Worker not available. Notifications require a PWA.');
-    return;
-  }
-
-  const currentPermission = Notification.permission;
-  showToast(`Permission status: ${currentPermission}`);
-
-  if (currentPermission === 'denied') {
-    showInAppAlert('Permission Blocked',
-      'Notifications are blocked. Please enable them in your device settings:\n\n' +
-      '1. Go to Chrome Settings\n' +
-      '2. Site Settings → Notifications\n' +
-      '3. Find this app and Allow');
-    return;
-  }
-
-  if (currentPermission === 'default') {
-    // Need to request permission - must be from user gesture
-    showInAppAlert('Permission Required',
-      'Tap OK, then ALLOW when prompted to enable notifications.',
-      () => {
-        Notification.requestPermission().then(permission => {
-          showToast(`Permission result: ${permission}`);
-          if (permission === 'granted') {
-            notificationsEnabled = true;
-            localStorage.setItem('notificationsEnabled', 'true');
-            updateNotificationButton();
-            sendTestNotification();
-          } else {
-            localStorage.setItem('notificationsEnabled', 'false');
-            showInAppAlert('Permission Denied',
-              'You denied notification permission. To enable later, go to browser settings.');
-          }
-        }).catch(error => {
-          showInAppAlert('Error', 'Could not request permission: ' + error.message);
-        });
-      });
+  if (Notification.permission !== 'granted') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        notificationsEnabled = true;
+        localStorage.setItem('notificationsEnabled', 'true');
+        updateNotificationButton();
+        sendTestNotification();
+      } else {
+        localStorage.setItem('notificationsEnabled', 'false');
+        showInAppAlert('Permission Denied', 'Please enable notifications in your browser/device settings');
+      }
+    });
   } else {
-    // Permission already granted
     sendTestNotification();
   }
 }
 
 function sendTestNotification() {
-  showToast('Sending notification...');
-
   const options = {
     body: 'You will receive reminders 15 min before each class.',
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
-    tag: 'test-notification-' + Date.now(), // Unique tag to avoid replacing
+    tag: 'test-notification',
     requireInteraction: false,
-    vibrate: [200, 100, 200],
-    silent: false
+    vibrate: [200, 100, 200]
   };
 
-  // Always use Service Worker for notifications (required on mobile)
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready
-      .then(registration => {
-        showToast('Service Worker ready, sending...');
-        return registration.showNotification('🔔 Mindful Maths', options);
-      })
-      .then(() => {
-        showInAppAlert('Success!', 'Test notification sent! Check your notification panel.');
-      })
-      .catch(error => {
-        showInAppAlert('Notification Failed',
-          'Error: ' + error.message + '\n\n' +
-          'Try these steps:\n' +
-          '1. Make sure notifications are allowed in Chrome settings\n' +
-          '2. Check if Do Not Disturb is off\n' +
-          '3. Try reinstalling the PWA');
-      });
+  // Use Service Worker for PWA notifications
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(registration => {
+      registration.showNotification('Test Notification', options)
+        .then(() => {
+          showToast('Test notification sent!');
+        })
+        .catch(error => {
+          console.error('SW notification error:', error);
+          showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
+        });
+    });
   } else {
-    showInAppAlert('Not Supported', 'Service Worker not available on this browser.');
+    // Fallback for regular browser
+    try {
+      const notification = new Notification('Test Notification', options);
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+      setTimeout(() => notification.close(), 5000);
+      showToast('Test notification sent!');
+    } catch (error) {
+      console.error('Test notification error:', error);
+      showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
+    }
   }
 }
 
