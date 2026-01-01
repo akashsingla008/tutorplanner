@@ -3045,6 +3045,15 @@ function testNotification() {
 }
 
 function sendTestNotification() {
+  console.log('[Notification] sendTestNotification called');
+
+  // Check notification permission first
+  if (Notification.permission !== 'granted') {
+    console.log('[Notification] Permission not granted:', Notification.permission);
+    showInAppAlert('Permission Required', 'Notification permission is: ' + Notification.permission + '. Please enable in settings.');
+    return;
+  }
+
   // Simplified options for better Android compatibility
   const options = {
     body: 'You will receive reminders 15 min before each class.',
@@ -3053,19 +3062,46 @@ function sendTestNotification() {
     vibrate: [200, 100, 200]
   };
 
-  // Always use Service Worker for notifications (required on mobile)
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(registration => {
-      return registration.showNotification('Mindful Maths', options);
-    }).then(() => {
-      showToast('Test notification sent!');
-    }).catch(error => {
-      console.error('SW notification error:', error);
-      showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
-    });
-  } else {
-    showInAppAlert('Notification Error', 'Notifications not supported on this device');
+  // Check if service worker is available
+  if (!('serviceWorker' in navigator)) {
+    console.log('[Notification] Service Worker not supported');
+    showInAppAlert('Not Supported', 'Service Worker not available on this device');
+    return;
   }
+
+  // Get service worker registration
+  navigator.serviceWorker.getRegistration().then(registration => {
+    console.log('[Notification] SW registration:', registration);
+
+    if (!registration) {
+      console.log('[Notification] No SW registration found');
+      showInAppAlert('Service Worker Error', 'No service worker registered. Try refreshing the app.');
+      return;
+    }
+
+    if (!registration.active) {
+      console.log('[Notification] SW not active, state:', registration.installing ? 'installing' : registration.waiting ? 'waiting' : 'none');
+      showInAppAlert('Service Worker Error', 'Service worker not active. Try refreshing the app.');
+      return;
+    }
+
+    console.log('[Notification] Calling showNotification...');
+
+    // Show the notification
+    registration.showNotification('Mindful Maths', options)
+      .then(() => {
+        console.log('[Notification] showNotification succeeded');
+        showToast('Notification sent! Check your notification panel.');
+      })
+      .catch(error => {
+        console.error('[Notification] showNotification error:', error);
+        showInAppAlert('Notification Error', 'Failed to show notification: ' + error.message);
+      });
+
+  }).catch(error => {
+    console.error('[Notification] getRegistration error:', error);
+    showInAppAlert('Service Worker Error', 'Could not get service worker: ' + error.message);
+  });
 }
 
 // Show notification permission prompt
