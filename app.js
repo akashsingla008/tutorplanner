@@ -94,6 +94,7 @@ function init() {
   checkAndCreateBackup();
   initNotifications();
   startClassReminderCheck();
+  initCelebrations();
 }
 
 // Auto-recover data if classes array is empty but backups exist
@@ -2241,8 +2242,15 @@ function renderReport() {
         const student = e.target.dataset.student;
         const period = e.target.dataset.period;
         const paymentKey = `${student}_${period}`;
+        const wasChecked = paymentStatus[paymentKey];
         paymentStatus[paymentKey] = e.target.checked;
         localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+
+        // Celebrate when payment is marked as received
+        if (e.target.checked && !wasChecked) {
+          celebratePayment();
+        }
+
         renderReport();
       });
     });
@@ -3142,4 +3150,315 @@ function updateNotificationButton() {
       btn.title = 'Notifications OFF - Click to enable';
     }
   }
+}
+
+// ==================== CELEBRATIONS & ACHIEVEMENTS ====================
+
+// Badge definitions
+const BADGES = {
+  firstClass: { icon: '🎓', name: 'First Class', description: 'Schedule your first class' },
+  tenClasses: { icon: '📚', name: '10 Classes', description: 'Complete 10 classes' },
+  fiftyClasses: { icon: '🌟', name: '50 Classes', description: 'Complete 50 classes' },
+  hundredClasses: { icon: '💯', name: '100 Classes', description: 'Complete 100 classes' },
+  firstPayment: { icon: '💰', name: 'First Payment', description: 'Mark your first payment received' },
+  tenPayments: { icon: '💎', name: '10 Payments', description: 'Receive 10 payments' },
+  firstStudent: { icon: '👋', name: 'First Student', description: 'Add your first student' },
+  fiveStudents: { icon: '👥', name: '5 Students', description: 'Have 5 active students' },
+  streak3: { icon: '🔥', name: '3-Day Streak', description: 'Use the app 3 days in a row' },
+  streak7: { icon: '⚡', name: 'Week Warrior', description: 'Use the app 7 days in a row' },
+  streak30: { icon: '🏆', name: 'Monthly Master', description: 'Use the app 30 days in a row' },
+  earlyBird: { icon: '🐦', name: 'Early Bird', description: 'Schedule a class before 8 AM' },
+  nightOwl: { icon: '🦉', name: 'Night Owl', description: 'Schedule a class after 8 PM' },
+  perfectWeek: { icon: '✨', name: 'Perfect Week', description: 'Complete all scheduled classes in a week' },
+  thousand: { icon: '🎉', name: '₹1000 Earned', description: 'Earn your first ₹1000' },
+  tenThousand: { icon: '🚀', name: '₹10,000 Earned', description: 'Earn ₹10,000 total' }
+};
+
+// Achievements state
+let achievements = safeJsonParse('achievements', {
+  badges: [],
+  streak: 0,
+  lastActiveDate: null,
+  totalClassesCompleted: 0,
+  totalPaymentsReceived: 0,
+  totalEarnings: 0
+});
+
+// Initialize celebrations system
+function initCelebrations() {
+  // Update streak on app load
+  updateStreak();
+
+  // Update header streak badge
+  updateHeaderStreakBadge();
+
+  // Setup event listeners
+  document.getElementById('achievementsBtn').addEventListener('click', showAchievementsModal);
+  document.getElementById('closeAchievements').addEventListener('click', closeAchievementsModal);
+  document.getElementById('achievementsModal').addEventListener('click', (e) => {
+    if (e.target.id === 'achievementsModal') closeAchievementsModal();
+  });
+
+  // Check for new badges based on current state
+  checkAllBadges();
+}
+
+// Confetti Animation
+function launchConfetti() {
+  const canvas = document.getElementById('confettiCanvas');
+  const ctx = canvas.getContext('2d');
+
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const confettiPieces = [];
+  const colors = ['#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'];
+
+  // Create confetti pieces
+  for (let i = 0; i < 150; i++) {
+    confettiPieces.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height - canvas.height,
+      w: Math.random() * 10 + 5,
+      h: Math.random() * 6 + 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      velocity: Math.random() * 3 + 2,
+      angle: Math.random() * Math.PI * 2,
+      spin: (Math.random() - 0.5) * 0.2
+    });
+  }
+
+  let animationFrame;
+  const startTime = Date.now();
+  const duration = 3000; // 3 seconds
+
+  function animate() {
+    const elapsed = Date.now() - startTime;
+
+    if (elapsed > duration) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      cancelAnimationFrame(animationFrame);
+      return;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    confettiPieces.forEach(piece => {
+      piece.y += piece.velocity;
+      piece.angle += piece.spin;
+
+      ctx.save();
+      ctx.translate(piece.x + piece.w / 2, piece.y + piece.h / 2);
+      ctx.rotate(piece.angle);
+      ctx.fillStyle = piece.color;
+      ctx.fillRect(-piece.w / 2, -piece.h / 2, piece.w, piece.h);
+      ctx.restore();
+
+      // Reset if off screen
+      if (piece.y > canvas.height) {
+        piece.y = -20;
+        piece.x = Math.random() * canvas.width;
+      }
+    });
+
+    animationFrame = requestAnimationFrame(animate);
+  }
+
+  animate();
+}
+
+// Update streak
+function updateStreak() {
+  const today = new Date().toISOString().split('T')[0];
+  const lastActive = achievements.lastActiveDate;
+
+  if (!lastActive) {
+    // First time using app
+    achievements.streak = 1;
+    achievements.lastActiveDate = today;
+  } else if (lastActive === today) {
+    // Already counted today
+    return;
+  } else {
+    const lastDate = new Date(lastActive);
+    const todayDate = new Date(today);
+    const diffDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      // Consecutive day - increase streak
+      achievements.streak++;
+      achievements.lastActiveDate = today;
+
+      // Check for streak badges
+      if (achievements.streak === 3) awardBadge('streak3');
+      if (achievements.streak === 7) awardBadge('streak7');
+      if (achievements.streak === 30) awardBadge('streak30');
+    } else if (diffDays > 1) {
+      // Streak broken - reset
+      achievements.streak = 1;
+      achievements.lastActiveDate = today;
+    }
+  }
+
+  saveAchievements();
+  updateHeaderStreakBadge();
+}
+
+// Update header streak badge
+function updateHeaderStreakBadge() {
+  const badge = document.getElementById('headerStreakBadge');
+  if (badge) {
+    badge.textContent = achievements.streak;
+    badge.dataset.streak = achievements.streak;
+    badge.style.display = achievements.streak > 0 ? 'flex' : 'none';
+  }
+}
+
+// Award a badge
+function awardBadge(badgeId) {
+  if (achievements.badges.includes(badgeId)) return; // Already have it
+
+  achievements.badges.push(badgeId);
+  saveAchievements();
+
+  // Show celebration
+  const badge = BADGES[badgeId];
+  if (badge) {
+    showAchievementPopup(badge.icon, badge.name);
+    launchConfetti();
+  }
+}
+
+// Show achievement popup
+function showAchievementPopup(icon, name) {
+  const popup = document.getElementById('achievementPopup');
+  const iconEl = document.getElementById('achievementIcon');
+  const nameEl = document.getElementById('achievementName');
+
+  iconEl.textContent = icon;
+  nameEl.textContent = name;
+
+  popup.classList.remove('hidden');
+
+  // Trigger animation
+  setTimeout(() => popup.classList.add('show'), 10);
+
+  // Hide after 4 seconds
+  setTimeout(() => {
+    popup.classList.remove('show');
+    setTimeout(() => popup.classList.add('hidden'), 400);
+  }, 4000);
+}
+
+// Show achievements modal
+function showAchievementsModal() {
+  const modal = document.getElementById('achievementsModal');
+
+  // Update streak display
+  document.getElementById('streakCount').textContent = achievements.streak;
+
+  // Update streak message
+  const streakMsg = document.getElementById('streakMessage');
+  if (achievements.streak === 0) {
+    streakMsg.textContent = 'Start using the app daily to build your streak!';
+  } else if (achievements.streak < 3) {
+    streakMsg.textContent = `Keep going! ${3 - achievements.streak} more days for your first streak badge!`;
+  } else if (achievements.streak < 7) {
+    streakMsg.textContent = `Great job! ${7 - achievements.streak} more days to become a Week Warrior!`;
+  } else if (achievements.streak < 30) {
+    streakMsg.textContent = `Amazing! ${30 - achievements.streak} more days to become a Monthly Master!`;
+  } else {
+    streakMsg.textContent = 'Incredible dedication! You are a true master!';
+  }
+
+  // Render badges
+  const badgesGrid = document.getElementById('badgesGrid');
+  badgesGrid.innerHTML = Object.entries(BADGES).map(([id, badge]) => {
+    const earned = achievements.badges.includes(id);
+    return `
+      <div class="badge-item ${earned ? 'earned' : 'locked'}" title="${badge.description}">
+        <span class="badge-icon">${badge.icon}</span>
+        <span class="badge-name">${badge.name}</span>
+      </div>
+    `;
+  }).join('');
+
+  // Render stats
+  const statsGrid = document.getElementById('allTimeStats');
+  const uniqueStudents = [...new Set(classes.map(c => c.student))].length;
+  const completedClasses = classes.filter(c => !c.cancelled && !c.pendingConfirmation && isClassCompleted(c)).length;
+
+  statsGrid.innerHTML = `
+    <div class="stat-item">
+      <span class="stat-value">${completedClasses}</span>
+      <span class="stat-label">Classes Completed</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-value">${uniqueStudents}</span>
+      <span class="stat-label">Students</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-value">${achievements.badges.length}</span>
+      <span class="stat-label">Badges Earned</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-value">${achievements.streak}</span>
+      <span class="stat-label">Day Streak</span>
+    </div>
+  `;
+
+  modal.classList.add('active');
+}
+
+// Close achievements modal
+function closeAchievementsModal() {
+  document.getElementById('achievementsModal').classList.remove('active');
+}
+
+// Save achievements
+function saveAchievements() {
+  localStorage.setItem('achievements', JSON.stringify(achievements));
+}
+
+// Check all badges based on current state
+function checkAllBadges() {
+  const uniqueStudents = [...new Set(classes.map(c => c.student))];
+  const completedClasses = classes.filter(c => !c.cancelled && !c.pendingConfirmation && isClassCompleted(c));
+
+  // First class
+  if (classes.length > 0) awardBadge('firstClass');
+
+  // Class milestones
+  if (completedClasses.length >= 10) awardBadge('tenClasses');
+  if (completedClasses.length >= 50) awardBadge('fiftyClasses');
+  if (completedClasses.length >= 100) awardBadge('hundredClasses');
+
+  // Student milestones
+  if (uniqueStudents.length >= 1) awardBadge('firstStudent');
+  if (uniqueStudents.length >= 5) awardBadge('fiveStudents');
+
+  // Check for early bird / night owl
+  classes.forEach(c => {
+    const startHour = parseInt(c.start.split(':')[0]);
+    if (startHour < 8) awardBadge('earlyBird');
+    if (startHour >= 20) awardBadge('nightOwl');
+  });
+
+  // Check payment badges
+  const paidCount = Object.values(paymentStatus).filter(v => v === true).length;
+  if (paidCount >= 1) awardBadge('firstPayment');
+  if (paidCount >= 10) awardBadge('tenPayments');
+}
+
+// Celebration for payment received
+function celebratePayment() {
+  launchConfetti();
+  showToast('🎉 Payment received!');
+  checkAllBadges();
+}
+
+// Celebration for class completion (can be called when class time passes)
+function celebrateClassCompletion(studentName) {
+  showToast(`✨ Class with ${studentName} completed!`);
+  checkAllBadges();
 }
