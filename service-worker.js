@@ -1,4 +1,4 @@
-const CACHE_NAME = "mindful-maths-v63";
+const CACHE_NAME = "mindful-maths-v64";
 
 const FILES_TO_CACHE = [
   "/",
@@ -37,23 +37,6 @@ self.addEventListener("fetch", event => {
         return response;
       })
       .catch(() => caches.match(event.request))
-  );
-});
-
-// Handle push events (for future web push support)
-self.addEventListener("push", event => {
-  const data = event.data ? event.data.json() : {};
-  const title = data.title || "Mindful Maths";
-  const options = {
-    body: data.body || "You have a notification",
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
-    vibrate: [200, 100, 200],
-    tag: data.tag || "default"
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(title, options)
   );
 });
 
