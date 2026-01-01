@@ -1929,6 +1929,47 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// Check if a class is completed based on its date and time
+function isClassCompleted(cls) {
+  // If class has a completion date stored, use that
+  if (cls.completedDate) return true;
+
+  // Check if the class date has passed
+  if (cls.date) {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    if (cls.date < todayStr) {
+      return true; // Class date is in the past
+    } else if (cls.date === todayStr) {
+      // Class is today - check if end time has passed
+      const now = new Date();
+      const [endHour, endMin] = cls.end.split(':').map(Number);
+      const classEndTime = new Date(now);
+      classEndTime.setHours(endHour, endMin, 0, 0);
+      return now > classEndTime;
+    }
+    return false; // Class date is in the future
+  }
+
+  // Fallback for classes without date (legacy)
+  const dayIndexMap = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
+  const today = new Date();
+  const todayDayIndex = today.getDay();
+  const classDayIndex = dayIndexMap[cls.day];
+
+  if (classDayIndex < todayDayIndex) {
+    return true;
+  } else if (classDayIndex === todayDayIndex) {
+    const now = new Date();
+    const [endHour, endMin] = cls.end.split(':').map(Number);
+    const classEndTime = new Date(now);
+    classEndTime.setHours(endHour, endMin, 0, 0);
+    return now > classEndTime;
+  }
+  return false;
+}
+
 // Report Functions
 function navigateReport(direction) {
   if (reportPeriod === 'custom') return; // No navigation for custom range
@@ -3325,17 +3366,6 @@ function initCelebrations() {
 
   // Update header streak badge
   updateHeaderStreakBadge();
-
-  // Debug: Log all clicks to find blocking element
-  document.addEventListener('click', function(e) {
-    console.log('Click detected on:', e.target.tagName, e.target.id || e.target.className, 'at coords:', e.clientX, e.clientY);
-
-    // Check what element is at click point
-    const elemAtPoint = document.elementFromPoint(e.clientX, e.clientY);
-    if (elemAtPoint !== e.target) {
-      console.log('Element at point differs:', elemAtPoint?.tagName, elemAtPoint?.id || elemAtPoint?.className);
-    }
-  }, true); // Use capture phase
 
   // Setup event listeners using event delegation for reliability
   document.addEventListener('click', function(e) {
