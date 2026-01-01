@@ -3229,7 +3229,6 @@ function showReminderToast(title, message) {
 }
 
 // End of Day Reminder System
-let endOfDayReminderShown = false;
 
 function startEndOfDayReminderCheck() {
   // Check every minute
@@ -3243,19 +3242,32 @@ function startEndOfDayReminderCheck() {
 function checkEndOfDayReminder() {
   const now = new Date();
   const hour = now.getHours();
-  const todayKey = now.toISOString().split('T')[0];
-  const lastReminderDate = localStorage.getItem('lastEndOfDayReminder');
+  const minutes = now.getMinutes();
+  const lastReminderTime = localStorage.getItem('lastEndOfDayReminderTime');
 
-  // Show reminder between 8 PM and 10 PM if not shown today
-  if (hour >= 20 && hour < 22 && lastReminderDate !== todayKey && !endOfDayReminderShown) {
-    endOfDayReminderShown = true;
-    showEndOfDayReminder();
-    localStorage.setItem('lastEndOfDayReminder', todayKey);
+  // Check if we're in the reminder window (8 PM to midnight)
+  if (hour >= 20 || hour === 0) {
+    // Check if there are pending tasks
+    const unpaidCount = getUnpaidClassesCount();
+    const hasPendingTasks = unpaidCount > 0;
+
+    // Only show reminder if there are pending tasks
+    if (hasPendingTasks) {
+      // Show every 30 minutes if there are still pending tasks
+      const nowTimestamp = now.getTime();
+      const lastTime = lastReminderTime ? parseInt(lastReminderTime) : 0;
+      const thirtyMinutes = 30 * 60 * 1000;
+
+      if (nowTimestamp - lastTime >= thirtyMinutes) {
+        showEndOfDayReminder();
+        localStorage.setItem('lastEndOfDayReminderTime', nowTimestamp.toString());
+      }
+    }
   }
 
-  // Reset flag at midnight
-  if (hour === 0) {
-    endOfDayReminderShown = false;
+  // Reset at 6 AM for next day
+  if (hour === 6 && minutes === 0) {
+    localStorage.removeItem('lastEndOfDayReminderTime');
   }
 
   // Update task badge periodically
