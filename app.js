@@ -3054,8 +3054,8 @@ function sendTestNotification() {
     vibrate: [200, 100, 200]
   };
 
-  // Use Service Worker for PWA notifications
-  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+  // Always use Service Worker for notifications (required on mobile)
+  if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => {
       registration.showNotification('Test Notification', options)
         .then(() => {
@@ -3065,21 +3065,12 @@ function sendTestNotification() {
           console.error('SW notification error:', error);
           showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
         });
+    }).catch(error => {
+      console.error('Service Worker not ready:', error);
+      showInAppAlert('Notification Error', 'Service Worker not available');
     });
   } else {
-    // Fallback for regular browser
-    try {
-      const notification = new Notification('Test Notification', options);
-      notification.onclick = () => {
-        window.focus();
-        notification.close();
-      };
-      setTimeout(() => notification.close(), 5000);
-      showToast('Test notification sent!');
-    } catch (error) {
-      console.error('Test notification error:', error);
-      showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
-    }
+    showInAppAlert('Notification Error', 'Notifications not supported on this device');
   }
 }
 
@@ -3187,24 +3178,12 @@ function sendClassReminder(classData) {
 
   const title = `🔔 ${classData.student}'s class in 15 min!`;
 
-  // Use Service Worker for PWA notifications
-  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+  // Always use Service Worker for notifications (required on mobile)
+  if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => {
       registration.showNotification(title, options)
         .catch(error => console.error('SW notification error:', error));
-    });
-  } else {
-    // Fallback for regular browser
-    try {
-      const notification = new Notification(title, options);
-      notification.onclick = () => {
-        window.focus();
-        notification.close();
-      };
-      setTimeout(() => notification.close(), 300000);
-    } catch (error) {
-      console.error('Notification error:', error);
-    }
+    }).catch(error => console.error('Service Worker not ready:', error));
   }
 }
 
@@ -3486,16 +3465,11 @@ function sendEndOfDayNotification(tasks) {
 
   const title = '🌙 End of Day Reminder';
 
-  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+  // Always use Service Worker for notifications (required on mobile)
+  if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => {
       registration.showNotification(title, options);
-    });
-  } else {
-    try {
-      new Notification(title, options);
-    } catch (error) {
-      console.error('Notification error:', error);
-    }
+    }).catch(error => console.error('Service Worker not ready:', error));
   }
 }
 
