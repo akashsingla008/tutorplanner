@@ -1877,12 +1877,13 @@ function getReportDateRange() {
     endDate.setDate(startDate.getDate() + 6);
     endDate.setHours(23, 59, 59, 999);
 
+    const dateRange = `${formatDateShort(startDate)} - ${formatDateShort(endDate)}`;
     if (reportOffset === 0) {
-      label = `This Week`;
+      label = `This Week (${dateRange})`;
     } else if (reportOffset === -1) {
-      label = `Last Week`;
+      label = `Last Week (${dateRange})`;
     } else if (reportOffset === 1) {
-      label = `Next Week`;
+      label = `Next Week (${dateRange})`;
     } else {
       label = `Week of ${formatDateLong(startDate)}`;
     }
@@ -1891,14 +1892,15 @@ function getReportDateRange() {
     startDate = new Date(now.getFullYear(), now.getMonth() + reportOffset, 1);
     endDate = new Date(now.getFullYear(), now.getMonth() + reportOffset + 1, 0, 23, 59, 59, 999);
 
+    const monthYear = startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     if (reportOffset === 0) {
-      label = `This Month`;
+      label = `This Month (${monthYear})`;
     } else if (reportOffset === -1) {
-      label = `Last Month`;
+      label = `Last Month (${monthYear})`;
     } else if (reportOffset === 1) {
-      label = `Next Month`;
+      label = `Next Month (${monthYear})`;
     } else {
-      label = startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      label = monthYear;
     }
   } else if (reportPeriod === 'custom' && customStartDate && customEndDate) {
     startDate = new Date(customStartDate);
@@ -1929,6 +1931,10 @@ function getReportDateRange() {
 
 function formatDateLong(date) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDateShort(date) {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function getClassesInRange(startDate, endDate) {
