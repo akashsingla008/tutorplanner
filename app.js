@@ -3332,6 +3332,11 @@ function showBackupReminderToast() {
   }, 30000);
 }
 
+// Test function - call testEndOfDayReminder() from console to test
+function testEndOfDayReminder() {
+  showEndOfDayReminder();
+}
+
 function showEndOfDayReminder() {
   // Get today's classes
   const todayStr = new Date().toISOString().split('T')[0];
