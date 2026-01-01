@@ -3054,12 +3054,18 @@ function sendTestNotification() {
     return;
   }
 
-  // Simplified options for better Android compatibility
+  // Enhanced options for better visibility
   const options = {
     body: 'You will receive reminders 15 min before each class.',
     icon: '/icons/icon-192.png',
+    badge: '/icons/icon-72.png',
     tag: 'test-' + Date.now(),
-    vibrate: [200, 100, 200]
+    vibrate: [300, 100, 300, 100, 300],
+    requireInteraction: true,
+    actions: [
+      { action: 'open', title: '📖 Open App' },
+      { action: 'dismiss', title: '✕ Dismiss' }
+    ]
   };
 
   // Check if service worker is available
@@ -3184,15 +3190,21 @@ function sendClassReminder(classData) {
     `${formatTime(classData.start)} - ${formatTime(classData.end)}`
   );
 
-  // Simplified options for better Android compatibility
+  // Enhanced options for better visibility
   const options = {
     body: `${formatTime(classData.start)} - ${formatTime(classData.end)} - Get ready!`,
     icon: '/icons/icon-192.png',
+    badge: '/icons/icon-72.png',
     tag: 'class-' + Date.now(),
-    vibrate: [200, 100, 200]
+    vibrate: [300, 100, 300, 100, 300],
+    requireInteraction: true,
+    actions: [
+      { action: 'open', title: '📖 Open App' },
+      { action: 'dismiss', title: '✕ Dismiss' }
+    ]
   };
 
-  const title = `${classData.student}'s class in 15 min!`;
+  const title = `⏰ ${classData.student}'s class in 15 min!`;
 
   // Always use Service Worker for notifications (required on mobile)
   if ('serviceWorker' in navigator) {
@@ -3486,15 +3498,21 @@ function showEndOfDayToast(tasks) {
 }
 
 function sendEndOfDayNotification(tasks) {
-  // Simplified options for better Android compatibility
+  // Enhanced options for better visibility
   const options = {
     body: tasks.join(' | '),
     icon: '/icons/icon-192.png',
+    badge: '/icons/icon-72.png',
     tag: 'eod-' + Date.now(),
-    vibrate: [200, 100, 200]
+    vibrate: [300, 100, 300, 100, 300],
+    requireInteraction: true,
+    actions: [
+      { action: 'open', title: '📖 Open App' },
+      { action: 'dismiss', title: '✕ Dismiss' }
+    ]
   };
 
-  const title = 'End of Day Reminder';
+  const title = '📋 End of Day Reminder';
 
   // Always use Service Worker for notifications (required on mobile)
   if ('serviceWorker' in navigator) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = "mindful-maths-v73";
+const CACHE_NAME = "mindful-maths-v74";
 
 const FILES_TO_CACHE = [
   "/",
@@ -42,9 +42,15 @@ self.addEventListener("fetch", event => {
 
 // Handle notification click
 self.addEventListener("notificationclick", event => {
+  const action = event.action;
   event.notification.close();
 
-  // Focus or open the app
+  // If dismiss action, just close
+  if (action === 'dismiss') {
+    return;
+  }
+
+  // For 'open' action or clicking the notification body, open/focus the app
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(clientList => {
       // If app is already open, focus it
