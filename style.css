@@ -1161,11 +1161,44 @@ header .subtitle {
   color: #6b7280;
 }
 
+.report-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.report-navigation .nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.report-navigation .nav-btn:hover {
+  background: #3b82f6;
+  color: white;
+}
+
+.report-navigation .nav-btn:active {
+  transform: scale(0.95);
+}
+
 .report-period-label {
   text-align: center;
   font-weight: 600;
   color: #374151;
   font-size: 1rem;
+  min-width: 180px;
 }
 
 /* Report Summary Cards */

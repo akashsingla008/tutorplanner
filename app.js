@@ -27,6 +27,7 @@ let selectedDuration = 60; // Default 1 hour
 let draggedClassIndex = null;
 let isCopyDrag = false;
 let reportPeriod = 'week';
+let reportOffset = 0; // Offset for navigating previous/next weeks/months
 let customStartDate = null;
 let customEndDate = null;
 let defaultRate = parseInt(localStorage.getItem('defaultRate')) || 500;
@@ -338,6 +339,7 @@ function setupEventListeners() {
       document.querySelectorAll(".period-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       reportPeriod = btn.dataset.period;
+      reportOffset = 0; // Reset offset when changing period
 
       const customDateRange = document.getElementById("customDateRange");
       if (reportPeriod === "custom") {
@@ -348,6 +350,10 @@ function setupEventListeners() {
       }
     });
   });
+
+  // Report navigation buttons
+  document.getElementById("prevReport").addEventListener("click", () => navigateReport(-1));
+  document.getElementById("nextReport").addEventListener("click", () => navigateReport(1));
 
   // Apply custom date range
   document.getElementById("applyDateRange").addEventListener("click", () => {
@@ -1849,29 +1855,51 @@ function escapeHtml(text) {
 }
 
 // Report Functions
+function navigateReport(direction) {
+  if (reportPeriod === 'custom') return; // No navigation for custom range
+  reportOffset += direction;
+  renderReport();
+}
+
 function getReportDateRange() {
   const now = new Date();
   let startDate, endDate, label;
 
   if (reportPeriod === 'week') {
-    // Get current week (Monday to Sunday)
+    // Get current week (Monday to Sunday) with offset
     const dayOfWeek = now.getDay();
     const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     startDate = new Date(now);
-    startDate.setDate(now.getDate() + diff);
+    startDate.setDate(now.getDate() + diff + (reportOffset * 7));
     startDate.setHours(0, 0, 0, 0);
 
     endDate = new Date(startDate);
     endDate.setDate(startDate.getDate() + 6);
     endDate.setHours(23, 59, 59, 999);
 
-    label = `Week of ${formatDateLong(startDate)}`;
+    if (reportOffset === 0) {
+      label = `This Week`;
+    } else if (reportOffset === -1) {
+      label = `Last Week`;
+    } else if (reportOffset === 1) {
+      label = `Next Week`;
+    } else {
+      label = `Week of ${formatDateLong(startDate)}`;
+    }
   } else if (reportPeriod === 'month') {
-    // Get current month
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    // Get month with offset
+    startDate = new Date(now.getFullYear(), now.getMonth() + reportOffset, 1);
+    endDate = new Date(now.getFullYear(), now.getMonth() + reportOffset + 1, 0, 23, 59, 59, 999);
 
-    label = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    if (reportOffset === 0) {
+      label = `This Month`;
+    } else if (reportOffset === -1) {
+      label = `Last Month`;
+    } else if (reportOffset === 1) {
+      label = `Next Month`;
+    } else {
+      label = startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
   } else if (reportPeriod === 'custom' && customStartDate && customEndDate) {
     startDate = new Date(customStartDate);
     startDate.setHours(0, 0, 0, 0);
@@ -1882,6 +1910,7 @@ function getReportDateRange() {
   } else {
     // Default to this week (fallback for invalid reportPeriod)
     reportPeriod = 'week';
+    reportOffset = 0;
     const dayOfWeek = now.getDay();
     const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     startDate = new Date(now);
@@ -1892,7 +1921,7 @@ function getReportDateRange() {
     endDate.setDate(startDate.getDate() + 6);
     endDate.setHours(23, 59, 59, 999);
 
-    label = `Week of ${formatDateLong(startDate)}`;
+    label = `This Week`;
   }
 
   return { startDate, endDate, label };
