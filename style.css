@@ -2333,10 +2333,12 @@ header .subtitle {
 /* Header Achievements Button */
 .achievements-icon {
   font-size: 18px;
+  pointer-events: none;
 }
 
 .streak-badge {
   position: absolute;
+  pointer-events: none;
   top: -2px;
   right: -2px;
   background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);

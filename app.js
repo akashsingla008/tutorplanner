@@ -3327,22 +3327,45 @@ function initCelebrations() {
   updateHeaderStreakBadge();
 
   // Setup event listeners
-  document.getElementById('achievementsBtn').addEventListener('click', function() {
-    console.log('Achievements button clicked');
-    showAchievementsModal();
-  });
+  const achievementsBtn = document.getElementById('achievementsBtn');
+  if (achievementsBtn) {
+    achievementsBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('Achievements button clicked');
+      showAchievementsModal();
+    });
+    // Make child elements not intercept clicks
+    achievementsBtn.querySelectorAll('*').forEach(child => {
+      child.style.pointerEvents = 'none';
+    });
+  } else {
+    console.error('achievementsBtn not found!');
+  }
 
-  document.getElementById('closeAchievements').addEventListener('click', function() {
-    console.log('Close achievements button clicked');
-    closeAchievementsModal();
-  });
-
-  document.getElementById('achievementsModal').addEventListener('click', (e) => {
-    if (e.target.id === 'achievementsModal') {
-      console.log('Modal backdrop clicked');
+  const closeBtn = document.getElementById('closeAchievements');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('Close achievements button clicked');
       closeAchievementsModal();
-    }
-  });
+    });
+  } else {
+    console.error('closeAchievements button not found!');
+  }
+
+  const achievementsModal = document.getElementById('achievementsModal');
+  if (achievementsModal) {
+    achievementsModal.addEventListener('click', (e) => {
+      if (e.target.id === 'achievementsModal') {
+        console.log('Modal backdrop clicked');
+        closeAchievementsModal();
+      }
+    });
+  } else {
+    console.error('achievementsModal not found!');
+  }
 
   // Check for badges silently on init (don't show popups)
   checkAllBadges(true);
