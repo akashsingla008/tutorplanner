@@ -96,6 +96,42 @@ function init() {
   startClassReminderCheck();
   startEndOfDayReminderCheck();
   initCelebrations();
+
+  // Initialize Firebase Cloud Messaging (after a short delay to let Firebase load)
+  setTimeout(initFirebaseCloudMessaging, 2000);
+}
+
+// Initialize Firebase Cloud Messaging
+async function initFirebaseCloudMessaging() {
+  try {
+    // Register Firebase messaging service worker
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      console.log('Firebase SW registered:', registration);
+    }
+
+    // Initialize FCM and get token
+    if (window.initFirebaseMessaging) {
+      const token = await window.initFirebaseMessaging();
+      if (token) {
+        console.log('FCM initialized successfully');
+        // Sync classes to Firestore
+        syncClassesData();
+      }
+    }
+  } catch (error) {
+    console.error('Firebase initialization error:', error);
+  }
+}
+
+// Sync classes data to Firestore for Cloud Functions
+function syncClassesData() {
+  if (window.syncClassesToFirestore) {
+    // Only sync upcoming classes (not old ones)
+    const today = new Date().toISOString().split('T')[0];
+    const upcomingClasses = classes.filter(c => c.date >= today && !c.cancelled);
+    window.syncClassesToFirestore(upcomingClasses);
+  }
 }
 
 // Auto-recover data if classes array is empty but backups exist
@@ -1891,6 +1927,8 @@ function saveClasses() {
   localStorage.setItem("classes", JSON.stringify(classes));
   // Clear selection to prevent stale indices after class modifications
   selectedClasses.clear();
+  // Sync to Firebase for cloud notifications
+  syncClassesData();
 }
 
 function formatTime(time24) {
