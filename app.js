@@ -3473,18 +3473,59 @@ function sendEndOfDayNotification(tasks) {
   }
 }
 
-// Toggle notifications - now shows a menu with options
+// Toggle notifications - shows a mobile-friendly dialog
 function toggleNotifications() {
-  const choice = prompt(
-    `Notification Settings:\n\n` +
-    `1 - ${notificationsEnabled ? 'Disable' : 'Enable'} notifications\n` +
-    `2 - Test notification\n` +
-    `3 - Check next upcoming class\n` +
-    `4 - Cancel\n\n` +
-    `Enter 1, 2, 3, or 4:`
-  );
+  const permissionStatus = Notification.permission;
+  const statusText = permissionStatus === 'granted'
+    ? (notificationsEnabled ? '🟢 Enabled' : '🔴 Disabled')
+    : (permissionStatus === 'denied' ? '⛔ Blocked' : '⚪ Not set');
 
-  if (choice === '1') {
+  const dialog = document.createElement('div');
+  dialog.className = 'notification-dialog';
+  dialog.innerHTML = `
+    <div class="notification-dialog-content">
+      <h3>🔔 Notification Settings</h3>
+      <p class="notification-status">Status: ${statusText}</p>
+
+      <div class="notification-options">
+        <button class="notification-option" id="notifToggle">
+          <span class="option-icon">${notificationsEnabled ? '🔕' : '🔔'}</span>
+          <span class="option-text">${notificationsEnabled ? 'Disable Notifications' : 'Enable Notifications'}</span>
+        </button>
+
+        <button class="notification-option" id="notifTest">
+          <span class="option-icon">📤</span>
+          <span class="option-text">Send Test Notification</span>
+        </button>
+
+        <button class="notification-option" id="notifNextClass">
+          <span class="option-icon">📅</span>
+          <span class="option-text">Check Next Class</span>
+        </button>
+      </div>
+
+      <button class="notification-close-btn" id="notifClose">Close</button>
+    </div>
+  `;
+
+  document.body.appendChild(dialog);
+  setTimeout(() => dialog.classList.add('show'), 10);
+
+  // Close dialog helper
+  const closeDialog = () => {
+    dialog.classList.remove('show');
+    setTimeout(() => dialog.remove(), 300);
+  };
+
+  // Event listeners
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) closeDialog();
+  });
+
+  document.getElementById('notifClose').addEventListener('click', closeDialog);
+
+  document.getElementById('notifToggle').addEventListener('click', () => {
+    closeDialog();
     if (notificationsEnabled) {
       notificationsEnabled = false;
       localStorage.setItem('notificationsEnabled', 'false');
@@ -3500,11 +3541,17 @@ function toggleNotifications() {
         requestNotificationPermission();
       }
     }
-  } else if (choice === '2') {
+  });
+
+  document.getElementById('notifTest').addEventListener('click', () => {
+    closeDialog();
     testNotification();
-  } else if (choice === '3') {
+  });
+
+  document.getElementById('notifNextClass').addEventListener('click', () => {
+    closeDialog();
     showNextClassInfo();
-  }
+  });
 }
 
 // Show next class info (for debugging)
