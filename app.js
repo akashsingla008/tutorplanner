@@ -3407,12 +3407,12 @@ function showAchievementsModal() {
     </div>
   `;
 
-  modal.classList.add('active');
+  modal.classList.remove('hidden');
 }
 
 // Close achievements modal
 function closeAchievementsModal() {
-  document.getElementById('achievementsModal').classList.remove('active');
+  document.getElementById('achievementsModal').classList.add('hidden');
 }
 
 // Save achievements
