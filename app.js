@@ -3054,8 +3054,8 @@ function sendTestNotification() {
     vibrate: [200, 100, 200]
   };
 
-  // Use Service Worker for PWA notifications
-  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+  // Always use Service Worker for notifications (required on mobile PWA)
+  if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => {
       registration.showNotification('Test Notification', options)
         .then(() => {
@@ -3067,19 +3067,7 @@ function sendTestNotification() {
         });
     });
   } else {
-    // Fallback for regular browser
-    try {
-      const notification = new Notification('Test Notification', options);
-      notification.onclick = () => {
-        window.focus();
-        notification.close();
-      };
-      setTimeout(() => notification.close(), 5000);
-      showToast('Test notification sent!');
-    } catch (error) {
-      console.error('Test notification error:', error);
-      showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
-    }
+    showInAppAlert('Not Supported', 'Service Worker not available on this browser.');
   }
 }
 
