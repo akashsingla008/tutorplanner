@@ -3326,22 +3326,16 @@ function initCelebrations() {
   // Update header streak badge
   updateHeaderStreakBadge();
 
-  // Setup event listeners
-  const achievementsBtn = document.getElementById('achievementsBtn');
-  if (achievementsBtn) {
-    achievementsBtn.addEventListener('click', function(e) {
+  // Setup event listeners using event delegation for reliability
+  document.addEventListener('click', function(e) {
+    const achievementsBtn = e.target.closest('#achievementsBtn');
+    if (achievementsBtn) {
       e.preventDefault();
       e.stopPropagation();
-      console.log('Achievements button clicked');
+      console.log('Achievements button clicked (delegated)');
       showAchievementsModal();
-    });
-    // Make child elements not intercept clicks
-    achievementsBtn.querySelectorAll('*').forEach(child => {
-      child.style.pointerEvents = 'none';
-    });
-  } else {
-    console.error('achievementsBtn not found!');
-  }
+    }
+  });
 
   const closeBtn = document.getElementById('closeAchievements');
   if (closeBtn) {
