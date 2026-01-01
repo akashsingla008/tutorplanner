@@ -94,6 +94,7 @@ function init() {
   checkAndCreateBackup();
   initNotifications();
   startClassReminderCheck();
+  startEndOfDayReminderCheck();
   initCelebrations();
 }
 
@@ -3205,6 +3206,188 @@ function showReminderToast(title, message) {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
   }, 15000);
+}
+
+// End of Day Reminder System
+let endOfDayReminderShown = false;
+
+function startEndOfDayReminderCheck() {
+  // Check every minute
+  setInterval(checkEndOfDayReminder, 60000);
+  // Also check immediately
+  checkEndOfDayReminder();
+  // Update task badge
+  updateTaskBadge();
+}
+
+function checkEndOfDayReminder() {
+  const now = new Date();
+  const hour = now.getHours();
+  const todayKey = now.toISOString().split('T')[0];
+  const lastReminderDate = localStorage.getItem('lastEndOfDayReminder');
+
+  // Show reminder between 8 PM and 10 PM if not shown today
+  if (hour >= 20 && hour < 22 && lastReminderDate !== todayKey && !endOfDayReminderShown) {
+    endOfDayReminderShown = true;
+    showEndOfDayReminder();
+    localStorage.setItem('lastEndOfDayReminder', todayKey);
+  }
+
+  // Reset flag at midnight
+  if (hour === 0) {
+    endOfDayReminderShown = false;
+  }
+
+  // Update task badge periodically
+  updateTaskBadge();
+}
+
+function showEndOfDayReminder() {
+  // Get today's classes
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayClasses = classes.filter(c => c.date === todayStr && !c.cancelled);
+  const completedToday = todayClasses.filter(c => isClassCompleted(c)).length;
+
+  // Get unpaid classes count
+  const unpaidCount = getUnpaidClassesCount();
+
+  // Build reminder message
+  let tasks = [];
+  if (completedToday > 0) {
+    tasks.push(`📝 Update ${completedToday} class${completedToday > 1 ? 'es' : ''} from today`);
+  }
+  if (unpaidCount > 0) {
+    tasks.push(`💰 Collect payment for ${unpaidCount} class${unpaidCount > 1 ? 'es' : ''}`);
+  }
+
+  if (tasks.length === 0) {
+    tasks.push("✅ All caught up! Great work today!");
+  }
+
+  // Show notification toast
+  showEndOfDayToast(tasks);
+
+  // Also send PWA notification if enabled
+  if (notificationsEnabled) {
+    sendEndOfDayNotification(tasks);
+  }
+}
+
+function getUnpaidClassesCount() {
+  // Count completed classes without payment marked
+  let unpaidCount = 0;
+
+  classes.forEach(c => {
+    if (c.cancelled || c.pendingConfirmation) return;
+    if (!isClassCompleted(c)) return;
+
+    // Check if payment is marked for this class
+    const paymentId = getClassPaymentId ? getClassPaymentId(c) : `${c.student}_${c.date}_${c.start}`;
+    if (!paymentStatus[paymentId]) {
+      unpaidCount++;
+    }
+  });
+
+  return unpaidCount;
+}
+
+function getPendingTasksCount() {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayClasses = classes.filter(c => c.date === todayStr && !c.cancelled && isClassCompleted(c));
+  const unpaidCount = getUnpaidClassesCount();
+
+  return todayClasses.length + unpaidCount;
+}
+
+function updateTaskBadge() {
+  const achievementsBtn = document.getElementById('achievementsBtn');
+  if (!achievementsBtn) return;
+
+  // Get or create task badge
+  let taskBadge = document.getElementById('taskBadge');
+  if (!taskBadge) {
+    taskBadge = document.createElement('span');
+    taskBadge.id = 'taskBadge';
+    taskBadge.className = 'task-badge';
+    achievementsBtn.appendChild(taskBadge);
+  }
+
+  const unpaidCount = getUnpaidClassesCount();
+
+  if (unpaidCount > 0) {
+    taskBadge.textContent = unpaidCount > 9 ? '9+' : unpaidCount;
+    taskBadge.style.display = 'flex';
+    taskBadge.title = `${unpaidCount} unpaid class${unpaidCount > 1 ? 'es' : ''}`;
+  } else {
+    taskBadge.style.display = 'none';
+  }
+}
+
+function showEndOfDayToast(tasks) {
+  const toast = document.createElement('div');
+  toast.className = 'end-of-day-toast';
+  toast.innerHTML = `
+    <div class="eod-toast-header">
+      <span class="eod-toast-icon">🌙</span>
+      <span class="eod-toast-title">End of Day Reminder</span>
+      <button class="eod-toast-close">✕</button>
+    </div>
+    <div class="eod-toast-body">
+      ${tasks.map(t => `<div class="eod-task">${t}</div>`).join('')}
+    </div>
+    <div class="eod-toast-footer">
+      <button class="eod-btn-reports">📊 View Reports</button>
+      <button class="eod-btn-dismiss">Got it!</button>
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+
+  // Animate in
+  setTimeout(() => toast.classList.add('show'), 10);
+
+  // Event listeners
+  toast.querySelector('.eod-toast-close').addEventListener('click', () => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  });
+
+  toast.querySelector('.eod-btn-dismiss').addEventListener('click', () => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  });
+
+  toast.querySelector('.eod-btn-reports').addEventListener('click', () => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+    // Switch to reports tab
+    switchView('reports');
+  });
+}
+
+function sendEndOfDayNotification(tasks) {
+  const options = {
+    body: tasks.join('\n'),
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    tag: 'end-of-day-reminder',
+    requireInteraction: true,
+    vibrate: [200, 100, 200]
+  };
+
+  const title = '🌙 End of Day Reminder';
+
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(registration => {
+      registration.showNotification(title, options);
+    });
+  } else {
+    try {
+      new Notification(title, options);
+    } catch (error) {
+      console.error('Notification error:', error);
+    }
+  }
 }
 
 // Toggle notifications - now shows a menu with options
