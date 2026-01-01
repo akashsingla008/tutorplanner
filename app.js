@@ -3045,31 +3045,23 @@ function testNotification() {
 }
 
 function sendTestNotification() {
+  // Simplified options for better Android compatibility
   const options = {
     body: 'You will receive reminders 15 min before each class.',
-    icon: 'icons/icon-192.png',
-    badge: 'icons/icon-192.png',
-    tag: 'test-notification-' + Date.now(),
-    requireInteraction: true,
-    vibrate: [300, 100, 300, 100, 300],
-    silent: false,
-    renotify: true
+    icon: '/icons/icon-192.png',
+    tag: 'test-' + Date.now(),
+    vibrate: [200, 100, 200]
   };
 
   // Always use Service Worker for notifications (required on mobile)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => {
-      registration.showNotification('Test Notification', options)
-        .then(() => {
-          showToast('Test notification sent!');
-        })
-        .catch(error => {
-          console.error('SW notification error:', error);
-          showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
-        });
+      return registration.showNotification('Mindful Maths', options);
+    }).then(() => {
+      showToast('Test notification sent!');
     }).catch(error => {
-      console.error('Service Worker not ready:', error);
-      showInAppAlert('Notification Error', 'Service Worker not available');
+      console.error('SW notification error:', error);
+      showInAppAlert('Notification Error', 'Could not send notification: ' + error.message);
     });
   } else {
     showInAppAlert('Notification Error', 'Notifications not supported on this device');
@@ -3156,36 +3148,21 @@ function sendClassReminder(classData) {
     `${formatTime(classData.start)} - ${formatTime(classData.end)}`
   );
 
-  // Use unique tag with timestamp to prevent notifications replacing each other
-  const uniqueTag = `class-${classData.student}-${classData.start}-${Date.now()}`;
-
-  // PWA notification options
+  // Simplified options for better Android compatibility
   const options = {
-    body: `⏰ ${formatTime(classData.start)} - ${formatTime(classData.end)}\nGet ready!`,
-    icon: 'icons/icon-192.png',
-    badge: 'icons/icon-192.png',
-    tag: uniqueTag,
-    requireInteraction: true,
-    vibrate: [300, 100, 300, 100, 300], // Longer vibration pattern
-    actions: [
-      { action: 'view', title: '📅 View Schedule' },
-      { action: 'dismiss', title: '✓ Got it' }
-    ],
-    renotify: true,
-    silent: false,
-    // These help with heads-up display on Android
-    urgency: 'high',
-    priority: 'high'
+    body: `${formatTime(classData.start)} - ${formatTime(classData.end)} - Get ready!`,
+    icon: '/icons/icon-192.png',
+    tag: 'class-' + Date.now(),
+    vibrate: [200, 100, 200]
   };
 
-  const title = `🔔 ${classData.student}'s class in 15 min!`;
+  const title = `${classData.student}'s class in 15 min!`;
 
   // Always use Service Worker for notifications (required on mobile)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => {
-      registration.showNotification(title, options)
-        .catch(error => console.error('SW notification error:', error));
-    }).catch(error => console.error('Service Worker not ready:', error));
+      return registration.showNotification(title, options);
+    }).catch(error => console.error('SW notification error:', error));
   }
 }
 
@@ -3473,21 +3450,20 @@ function showEndOfDayToast(tasks) {
 }
 
 function sendEndOfDayNotification(tasks) {
+  // Simplified options for better Android compatibility
   const options = {
-    body: tasks.join('\n'),
-    icon: 'icons/icon-192.png',
-    badge: 'icons/icon-192.png',
-    tag: 'end-of-day-reminder',
-    requireInteraction: true,
+    body: tasks.join(' | '),
+    icon: '/icons/icon-192.png',
+    tag: 'eod-' + Date.now(),
     vibrate: [200, 100, 200]
   };
 
-  const title = '🌙 End of Day Reminder';
+  const title = 'End of Day Reminder';
 
   // Always use Service Worker for notifications (required on mobile)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => {
-      registration.showNotification(title, options);
+      return registration.showNotification(title, options);
     }).catch(error => console.error('Service Worker not ready:', error));
   }
 }
