@@ -2022,6 +2022,12 @@ function getClassesInRange(startDate, endDate) {
   });
 }
 
+// Generate unique ID for a class for payment tracking
+function getClassPaymentId(cls) {
+  // Create unique ID based on student, date, and time
+  return `${cls.student}_${cls.date}_${cls.start}_${cls.end}`;
+}
+
 function renderReport() {
   const { startDate, endDate, label } = getReportDateRange();
 
@@ -2090,7 +2096,7 @@ function renderReport() {
   document.getElementById("cancelledClasses").textContent = cancelledCount;
   document.getElementById("totalHours").textContent = totalHours;
 
-  // Calculate per-student stats
+  // Calculate per-student stats with individual class tracking
   const studentStats = {};
   classesInRange.forEach(c => {
     if (!studentStats[c.student]) {
@@ -2101,7 +2107,10 @@ function renderReport() {
         completed: 0,
         upcoming: 0,
         completedMinutes: 0,
-        upcomingMinutes: 0
+        upcomingMinutes: 0,
+        paidClasses: 0,
+        paidMinutes: 0,
+        completedClassIds: [] // Track individual completed class IDs
       };
     }
     studentStats[c.student].total++;
@@ -2115,6 +2124,14 @@ function renderReport() {
       if (isClassCompleted(c)) {
         studentStats[c.student].completed++;
         studentStats[c.student].completedMinutes += minutes;
+        // Generate unique class ID for payment tracking
+        const classId = getClassPaymentId(c);
+        studentStats[c.student].completedClassIds.push(classId);
+        // Check if this class is paid
+        if (paymentStatus[classId]) {
+          studentStats[c.student].paidClasses++;
+          studentStats[c.student].paidMinutes += minutes;
+        }
       } else {
         studentStats[c.student].upcoming++;
         studentStats[c.student].upcomingMinutes += minutes;
@@ -2136,16 +2153,19 @@ function renderReport() {
       const stats = studentStats[student];
       const completedClasses = stats.completed;
       const upcomingClasses = stats.upcoming;
+      const paidClasses = stats.paidClasses;
+      const unpaidClasses = completedClasses - paidClasses;
       const completedHours = (stats.completedMinutes / 60).toFixed(1);
       const rate = studentRates[student] || defaultRate;
       // Only calculate amount for completed classes
       const amount = Math.round((stats.completedMinutes / 60) * rate);
+      const paidAmountForStudent = Math.round((stats.paidMinutes / 60) * rate);
+      const unpaidAmount = amount - paidAmountForStudent;
       totalAmount += amount;
+      paidAmount += paidAmountForStudent;
 
-      // Check payment status for this student and period
-      const paymentKey = `${student}_${periodKey}`;
-      const isPaid = paymentStatus[paymentKey] || false;
-      if (isPaid) paidAmount += amount;
+      // All classes paid?
+      const allPaid = completedClasses > 0 && paidClasses === completedClasses;
 
       // Determine row class based on completed vs upcoming
       const hasCompletedClasses = completedClasses > 0;
@@ -2153,7 +2173,8 @@ function renderReport() {
       const hasPendingClasses = stats.pending > 0;
 
       // Row color logic:
-      // - Green: only completed classes (no upcoming, no pending)
+      // - Green: all completed classes are paid
+      // - Light green: has completed but not all paid
       // - Amber: only upcoming or pending classes (no completed)
       // - Mixed (light yellow): has both completed and upcoming/pending
       let rowClass = '';
@@ -2162,13 +2183,35 @@ function renderReport() {
       } else if (hasCompletedClasses && (hasUpcomingClasses || hasPendingClasses)) {
         rowClass = 'report-row-mixed'; // Mix of completed and upcoming - light yellow
       } else if (hasCompletedClasses) {
-        rowClass = isPaid ? 'report-row-paid' : 'report-row-confirmed'; // Green shades
+        rowClass = allPaid ? 'report-row-paid' : 'report-row-confirmed'; // Green shades
       }
 
       // Build badges for upcoming and pending
       const badges = [];
       if (hasUpcomingClasses) badges.push(`${upcomingClasses} upcoming`);
       if (hasPendingClasses) badges.push(`${stats.pending} awaiting`);
+
+      // Payment status display
+      let paymentDisplay = '';
+      if (hasCompletedClasses) {
+        if (allPaid) {
+          paymentDisplay = `<span class="payment-status paid">✓ All Paid (${paidClasses})</span>`;
+        } else if (paidClasses > 0) {
+          paymentDisplay = `
+            <span class="payment-status partial">${paidClasses}/${completedClasses} Paid</span>
+            <button class="mark-paid-btn" data-student="${escapeHtml(student)}" data-class-ids="${stats.completedClassIds.join(',')}" title="Mark classes as paid">
+              Mark Paid
+            </button>
+          `;
+        } else {
+          paymentDisplay = `
+            <span class="payment-status unpaid">${completedClasses} Unpaid</span>
+            <button class="mark-paid-btn" data-student="${escapeHtml(student)}" data-class-ids="${stats.completedClassIds.join(',')}" title="Mark classes as paid">
+              Mark Paid
+            </button>
+          `;
+        }
+      }
 
       return `
         <tr class="${rowClass}">
@@ -2185,18 +2228,12 @@ function renderReport() {
                    value="${rate}"
                    min="0" step="50" />
           </td>
-          <td class="amount">${hasCompletedClasses ? `₹${amount.toLocaleString()}` : '-'}</td>
+          <td class="amount">${hasCompletedClasses ? `₹${amount.toLocaleString()}${unpaidAmount > 0 ? ` <span class="unpaid-amount">(₹${unpaidAmount.toLocaleString()} unpaid)</span>` : ''}` : '-'}</td>
           <td class="payment-cell">
             ${hasCompletedClasses ? `
-              <label class="payment-checkbox">
-                <input type="checkbox" class="payment-toggle"
-                       data-student="${escapeHtml(student)}"
-                       data-period="${periodKey}"
-                       ${isPaid ? 'checked' : ''} />
-                <span class="payment-label">${isPaid ? 'Paid' : 'Pending'}</span>
-              </label>
-              ${!isPaid && amount > 0 ? `
-                <button class="reminder-btn" data-student="${escapeHtml(student)}" data-amount="${amount}" data-classes="${completedClasses}" data-hours="${completedHours}" title="Send payment reminder">
+              ${paymentDisplay}
+              ${unpaidAmount > 0 ? `
+                <button class="reminder-btn" data-student="${escapeHtml(student)}" data-amount="${unpaidAmount}" data-classes="${unpaidClasses}" data-hours="${(stats.completedMinutes - stats.paidMinutes) / 60}" title="Send payment reminder">
                   📩
                 </button>
               ` : ''}
@@ -2236,22 +2273,12 @@ function renderReport() {
       });
     });
 
-    // Add event listeners to payment toggles
-    tbody.querySelectorAll('.payment-toggle').forEach(checkbox => {
-      checkbox.addEventListener('change', (e) => {
+    // Add event listeners to "Mark Paid" buttons
+    tbody.querySelectorAll('.mark-paid-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
         const student = e.target.dataset.student;
-        const period = e.target.dataset.period;
-        const paymentKey = `${student}_${period}`;
-        const wasChecked = paymentStatus[paymentKey];
-        paymentStatus[paymentKey] = e.target.checked;
-        localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
-
-        // Celebrate when payment is marked as received
-        if (e.target.checked && !wasChecked) {
-          celebratePayment();
-        }
-
-        renderReport();
+        const classIds = e.target.dataset.classIds.split(',');
+        showMarkPaidDialog(student, classIds);
       });
     });
 
@@ -2469,6 +2496,110 @@ function showChartDayDetails(day, paid, completed, upcoming, classesInRange, isC
       if (popup) popup.remove();
     });
   }
+}
+
+// Show dialog to mark individual classes as paid
+function showMarkPaidDialog(student, classIds) {
+  // Find the actual class details for each class ID
+  const classDetails = classIds.map(classId => {
+    const parts = classId.split('_');
+    // Format: student_date_start_end
+    const date = parts[1];
+    const start = parts[2];
+    const end = parts[3];
+    const isPaid = paymentStatus[classId] || false;
+    const rate = studentRates[student] || defaultRate;
+    const minutes = getMinutesBetween(start, end);
+    const amount = Math.round((minutes / 60) * rate);
+
+    // Format date nicely
+    const dateObj = new Date(date + 'T00:00:00');
+    const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+
+    return { classId, date, dateStr, start, end, isPaid, amount };
+  });
+
+  // Sort by date
+  classDetails.sort((a, b) => a.date.localeCompare(b.date));
+
+  const dialogHtml = `
+    <div class="mark-paid-dialog-content">
+      <h3>Mark Classes Paid - ${escapeHtml(student)}</h3>
+      <p class="dialog-subtitle">Select the classes that have been paid for:</p>
+      <div class="class-payment-list">
+        ${classDetails.map(cls => `
+          <label class="class-payment-item ${cls.isPaid ? 'paid' : ''}">
+            <input type="checkbox" class="class-paid-checkbox" data-class-id="${cls.classId}" ${cls.isPaid ? 'checked' : ''} />
+            <span class="class-info">
+              <span class="class-date">${cls.dateStr}</span>
+              <span class="class-time">${formatTime(cls.start)} - ${formatTime(cls.end)}</span>
+            </span>
+            <span class="class-amount">₹${cls.amount.toLocaleString()}</span>
+          </label>
+        `).join('')}
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="markAllPaidBtn">Mark All Paid</button>
+        <button class="btn btn-primary" id="savePaymentBtn">Save</button>
+        <button class="btn btn-secondary" id="cancelPaymentBtn">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  // Create dialog overlay
+  const dialog = document.createElement('div');
+  dialog.id = 'markPaidDialog';
+  dialog.className = 'modal';
+  dialog.innerHTML = `<div class="modal-content">${dialogHtml}</div>`;
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) closeMarkPaidDialog();
+  });
+  document.body.appendChild(dialog);
+
+  // Event listeners
+  document.getElementById('markAllPaidBtn').addEventListener('click', () => {
+    dialog.querySelectorAll('.class-paid-checkbox').forEach(cb => {
+      cb.checked = true;
+      cb.closest('.class-payment-item').classList.add('paid');
+    });
+  });
+
+  document.getElementById('savePaymentBtn').addEventListener('click', () => {
+    let newPaymentsCount = 0;
+    dialog.querySelectorAll('.class-paid-checkbox').forEach(cb => {
+      const classId = cb.dataset.classId;
+      const wasChecked = paymentStatus[classId];
+      paymentStatus[classId] = cb.checked;
+      if (cb.checked && !wasChecked) newPaymentsCount++;
+    });
+    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    closeMarkPaidDialog();
+
+    // Celebrate if new payments were marked
+    if (newPaymentsCount > 0) {
+      celebratePayment();
+    }
+
+    renderReport();
+  });
+
+  document.getElementById('cancelPaymentBtn').addEventListener('click', closeMarkPaidDialog);
+
+  // Update visual state when checkbox changes
+  dialog.querySelectorAll('.class-paid-checkbox').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        e.target.closest('.class-payment-item').classList.add('paid');
+      } else {
+        e.target.closest('.class-payment-item').classList.remove('paid');
+      }
+    });
+  });
+}
+
+function closeMarkPaidDialog() {
+  const dialog = document.getElementById('markPaidDialog');
+  if (dialog) dialog.remove();
 }
 
 // Send payment reminder
