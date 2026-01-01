@@ -2146,6 +2146,150 @@ header .subtitle {
   transform: scale(0.98);
 }
 
+/* Storage Indicator in Backup Dialog */
+.storage-indicator {
+  background: #f3f4f6;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.storage-indicator.good .storage-fill {
+  background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+}
+
+.storage-indicator.caution .storage-fill {
+  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+}
+
+.storage-indicator.warning .storage-fill {
+  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+}
+
+.storage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.storage-label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+}
+
+.storage-value {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.storage-bar {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.storage-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.storage-warning {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Backup Reminder Toast */
+.backup-reminder-toast {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+  border-radius: 16px;
+  padding: 0;
+  max-width: 360px;
+  width: calc(100% - 32px);
+  box-shadow: 0 10px 40px rgba(30, 64, 175, 0.4);
+  z-index: 10001;
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.backup-reminder-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.backup-reminder-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.backup-reminder-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.backup-reminder-text {
+  flex: 1;
+}
+
+.backup-reminder-text strong {
+  display: block;
+  color: white;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.backup-reminder-text p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+.backup-reminder-btn {
+  background: white;
+  color: #1e40af;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.backup-reminder-btn:hover {
+  transform: scale(1.05);
+}
+
+.backup-reminder-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  margin-left: -4px;
+}
+
+.backup-reminder-close:hover {
+  color: white;
+}
+
 /* In-App Alert (Notification Fallback) */
 .in-app-alert {
   position: fixed;

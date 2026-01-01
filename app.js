@@ -2734,8 +2734,8 @@ function createAutoBackup() {
   // Add new backup
   backups.unshift(backupData);
 
-  // Keep only last 4 backups
-  backups = backups.slice(0, 4);
+  // Keep only last 2 backups to save storage space
+  backups = backups.slice(0, 2);
 
   localStorage.setItem('autoBackups', JSON.stringify(backups));
   localStorage.setItem('lastBackupDate', new Date().toISOString());
@@ -2819,6 +2819,29 @@ function importData(file) {
   reader.readAsText(file);
 }
 
+// Calculate localStorage usage
+function getStorageUsage() {
+  let totalSize = 0;
+  for (let key in localStorage) {
+    if (localStorage.hasOwnProperty(key)) {
+      totalSize += localStorage[key].length * 2; // UTF-16 = 2 bytes per char
+    }
+  }
+  return totalSize;
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+function getStoragePercentage() {
+  const used = getStorageUsage();
+  const limit = 5 * 1024 * 1024; // 5 MB typical limit
+  return Math.min((used / limit) * 100, 100);
+}
+
 // Show backup/restore dialog
 function showBackupDialog() {
   const backups = safeJsonParse('autoBackups', []);
@@ -2836,25 +2859,41 @@ function showBackupDialog() {
     backupListHtml = '<p class="empty-state">No automatic backups yet</p>';
   }
 
+  // Calculate storage usage
+  const storageUsed = getStorageUsage();
+  const storagePercent = getStoragePercentage();
+  const storageClass = storagePercent > 80 ? 'warning' : storagePercent > 60 ? 'caution' : 'good';
+
   const dialogHtml = `
     <div class="backup-dialog-content">
       <h3>Data Backup & Restore</h3>
 
+      <div class="storage-indicator ${storageClass}">
+        <div class="storage-header">
+          <span class="storage-label">💾 Storage Used</span>
+          <span class="storage-value">${formatBytes(storageUsed)} / 5 MB</span>
+        </div>
+        <div class="storage-bar">
+          <div class="storage-fill" style="width: ${storagePercent}%"></div>
+        </div>
+        ${storagePercent > 70 ? '<p class="storage-warning">⚠️ Storage getting full. Please export a backup!</p>' : ''}
+      </div>
+
       <div class="backup-section">
-        <h4>Export Data</h4>
-        <p>Download a backup file to your device</p>
+        <h4>📥 Export Data</h4>
+        <p>Download a backup file to keep your data safe</p>
         <button class="btn btn-primary" id="exportDataBtn">Download Backup</button>
       </div>
 
       <div class="backup-section">
-        <h4>Import Data</h4>
+        <h4>📤 Import Data</h4>
         <p>Restore from a backup file</p>
         <input type="file" id="importFile" accept=".json" style="display:none" />
         <button class="btn btn-secondary" id="chooseFileBtn">Choose Backup File</button>
       </div>
 
       <div class="backup-section">
-        <h4>Auto Backups (Last 4 weeks)</h4>
+        <h4>🔄 Auto Backups (Last 2 weeks)</h4>
         <div class="backup-list" id="backupList">
           ${backupListHtml}
         </div>
@@ -3240,6 +3279,76 @@ function checkEndOfDayReminder() {
 
   // Update task badge periodically
   updateTaskBadge();
+
+  // Check for weekly backup reminder
+  checkBackupReminder();
+}
+
+// Check if backup reminder should be shown (weekly)
+function checkBackupReminder() {
+  const lastExportReminder = localStorage.getItem('lastExportReminder');
+  const now = new Date();
+  const todayKey = now.toISOString().split('T')[0];
+
+  // Only show once per day and if 7+ days since last reminder
+  if (lastExportReminder) {
+    const lastDate = new Date(lastExportReminder);
+    const daysSinceReminder = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
+    if (daysSinceReminder < 7) return;
+  }
+
+  // Check storage usage - remind if over 50% or if it's been a week
+  const storagePercent = getStoragePercentage();
+  const shouldRemind = storagePercent > 50 || !lastExportReminder;
+
+  if (shouldRemind) {
+    showBackupReminderToast();
+    localStorage.setItem('lastExportReminder', todayKey);
+  }
+}
+
+// Show backup reminder toast
+function showBackupReminderToast() {
+  const storagePercent = getStoragePercentage();
+  const message = storagePercent > 70
+    ? `⚠️ Storage is ${storagePercent.toFixed(0)}% full!`
+    : `📅 Weekly backup reminder`;
+
+  const toast = document.createElement('div');
+  toast.className = 'backup-reminder-toast';
+  toast.innerHTML = `
+    <div class="backup-reminder-content">
+      <span class="backup-reminder-icon">💾</span>
+      <div class="backup-reminder-text">
+        <strong>${message}</strong>
+        <p>Export your data to keep it safe</p>
+      </div>
+      <button class="backup-reminder-btn">Backup Now</button>
+      <button class="backup-reminder-close">✕</button>
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+  setTimeout(() => toast.classList.add('show'), 10);
+
+  toast.querySelector('.backup-reminder-btn').addEventListener('click', () => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+    showBackupDialog();
+  });
+
+  toast.querySelector('.backup-reminder-close').addEventListener('click', () => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  });
+
+  // Auto-dismiss after 30 seconds
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 30000);
 }
 
 function showEndOfDayReminder() {
