@@ -3326,6 +3326,17 @@ function initCelebrations() {
   // Update header streak badge
   updateHeaderStreakBadge();
 
+  // Debug: Log all clicks to find blocking element
+  document.addEventListener('click', function(e) {
+    console.log('Click detected on:', e.target.tagName, e.target.id || e.target.className, 'at coords:', e.clientX, e.clientY);
+
+    // Check what element is at click point
+    const elemAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+    if (elemAtPoint !== e.target) {
+      console.log('Element at point differs:', elemAtPoint?.tagName, elemAtPoint?.id || elemAtPoint?.className);
+    }
+  }, true); // Use capture phase
+
   // Setup event listeners using event delegation for reliability
   document.addEventListener('click', function(e) {
     const achievementsBtn = e.target.closest('#achievementsBtn');
