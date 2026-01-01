@@ -3323,12 +3323,6 @@ function updateTaskBadge() {
   }
 }
 
-// Test function for end-of-day reminder (can be called from console or triggered for testing)
-function testEndOfDayReminder() {
-  console.log('Testing end-of-day reminder...');
-  showEndOfDayReminder();
-}
-
 function showEndOfDayToast(tasks) {
   const toast = document.createElement('div');
   toast.className = 'end-of-day-toast';
@@ -3562,7 +3556,6 @@ function initCelebrations() {
     if (achievementsBtn) {
       e.preventDefault();
       e.stopPropagation();
-      console.log('Achievements button clicked (delegated)');
       showAchievementsModal();
     }
   });
@@ -3572,23 +3565,17 @@ function initCelebrations() {
     closeBtn.addEventListener('click', function(e) {
       e.preventDefault();
       e.stopPropagation();
-      console.log('Close achievements button clicked');
       closeAchievementsModal();
     });
-  } else {
-    console.error('closeAchievements button not found!');
   }
 
   const achievementsModal = document.getElementById('achievementsModal');
   if (achievementsModal) {
     achievementsModal.addEventListener('click', (e) => {
       if (e.target.id === 'achievementsModal') {
-        console.log('Modal backdrop clicked');
         closeAchievementsModal();
       }
     });
-  } else {
-    console.error('achievementsModal not found!');
   }
 
   // Check for badges silently on init (don't show popups)
@@ -3596,8 +3583,6 @@ function initCelebrations() {
 
   // After init, enable celebrations
   celebrationsInitialized = true;
-
-  console.log('Celebrations initialized. Streak:', achievements.streak, 'Badges:', achievements.badges);
 
   // Show welcome back popup on app load
   setTimeout(() => {
@@ -3760,38 +3745,30 @@ function updateStreak() {
   const today = new Date().toISOString().split('T')[0];
   const lastActive = achievements.lastActiveDate;
 
-  console.log('Updating streak. Today:', today, 'Last active:', lastActive, 'Current streak:', achievements.streak);
-
   if (!lastActive) {
     // First time using app
     achievements.streak = 1;
     achievements.lastActiveDate = today;
-    console.log('First time user - streak set to 1');
   } else if (lastActive === today) {
     // Already counted today - do nothing but ensure streak is at least 1
     if (achievements.streak < 1) achievements.streak = 1;
-    console.log('Already active today - streak unchanged:', achievements.streak);
     return;
   } else {
     const lastDate = new Date(lastActive + 'T00:00:00');
     const todayDate = new Date(today + 'T00:00:00');
     const diffDays = Math.round((todayDate - lastDate) / (1000 * 60 * 60 * 24));
 
-    console.log('Days since last active:', diffDays);
-
     if (diffDays === 1) {
       // Consecutive day - increase streak
       achievements.streak++;
       achievements.lastActiveDate = today;
-      console.log('Consecutive day! New streak:', achievements.streak);
 
-      // Check for streak badges (these will show celebration since celebrationsInitialized will be true after init)
+      // Check for streak badges
       if (achievements.streak === 3) awardBadge('streak3');
       if (achievements.streak === 7) awardBadge('streak7');
       if (achievements.streak === 30) awardBadge('streak30');
     } else if (diffDays > 1) {
       // Streak broken - reset
-      console.log('Streak broken! Resetting from', achievements.streak, 'to 1');
       achievements.streak = 1;
       achievements.lastActiveDate = today;
     }
@@ -3817,8 +3794,6 @@ function awardBadge(badgeId, silent = false) {
 
   achievements.badges.push(badgeId);
   saveAchievements();
-
-  console.log('Badge awarded:', badgeId, 'Silent:', silent);
 
   // Show celebration only if not silent and celebrations are initialized
   const badge = BADGES[badgeId];
@@ -3906,17 +3881,13 @@ function showAchievementsModal() {
     </div>
   `;
 
-  console.log('Opening achievements modal');
   modal.classList.remove('hidden');
-  console.log('Modal hidden class removed. Classes now:', modal.className);
 }
 
 // Close achievements modal
 function closeAchievementsModal() {
   const modal = document.getElementById('achievementsModal');
-  console.log('Closing achievements modal. Current classes:', modal.className);
   modal.classList.add('hidden');
-  console.log('Modal hidden class added. Classes now:', modal.className);
 }
 
 // Save achievements
