@@ -3049,9 +3049,11 @@ function sendTestNotification() {
     body: 'You will receive reminders 15 min before each class.',
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
-    tag: 'test-notification',
-    requireInteraction: false,
-    vibrate: [200, 100, 200]
+    tag: 'test-notification-' + Date.now(),
+    requireInteraction: true,
+    vibrate: [300, 100, 300, 100, 300],
+    silent: false,
+    renotify: true
   };
 
   // Always use Service Worker for notifications (required on mobile)
