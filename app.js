@@ -493,15 +493,23 @@ function navigateWeek(direction) {
 
 function updateWeekLabel() {
   const label = document.getElementById("weekLabel");
+  const startDate = getWeekStartDate(currentWeekOffset);
+  const endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + 6);
+  const dateRange = `${formatDateShort(startDate)} - ${formatDateShort(endDate)}`;
+
   if (currentWeekOffset === 0) {
-    label.textContent = "This Week";
+    label.textContent = `This Week (${dateRange})`;
   } else if (currentWeekOffset === 1) {
-    label.textContent = "Next Week";
+    label.textContent = `Next Week (${dateRange})`;
   } else if (currentWeekOffset === -1) {
-    label.textContent = "Last Week";
+    label.textContent = `Last Week (${dateRange})`;
+  } else if (currentWeekOffset === 2) {
+    label.textContent = `In 2 Weeks (${dateRange})`;
+  } else if (currentWeekOffset === -2) {
+    label.textContent = `2 Weeks Ago (${dateRange})`;
   } else {
-    const startDate = getWeekStartDate(currentWeekOffset);
-    label.textContent = formatDateShort(startDate);
+    label.textContent = `Week of ${formatDateShort(startDate)}`;
   }
 }
 
