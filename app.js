@@ -1452,9 +1452,7 @@ I'd like to schedule a class with you:
 ⏰ *${startTime} - ${endTime}*
 
 Please confirm if this time works for you.
-
-Thanks!
-- Mahak (Mindful Maths)`;
+`;
 
   // Open WhatsApp with the message
   const encodedMessage = encodeURIComponent(message);
@@ -2369,10 +2367,7 @@ Just a gentle reminder about ${student}'s tuition fees:
 *₹${parseInt(amount).toLocaleString()}*
 
 Let me know if you have any questions.
-
-Thanks! 😊
-- Mahak,
-Mindful Maths by Mahak`;
+`;
 
   // Check if Web Share API is available (mostly on mobile)
   if (navigator.share) {
