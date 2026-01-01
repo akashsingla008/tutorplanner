@@ -2337,26 +2337,8 @@ header .subtitle {
 }
 
 .streak-badge {
-  position: absolute;
-  pointer-events: none;
-  top: -2px;
-  right: -2px;
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-  color: white;
-  font-size: 10px;
-  font-weight: bold;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-}
-
-.streak-badge:empty,
-.streak-badge[data-streak="0"] {
-  display: none;
+  /* Hidden - replaced by task badge for clarity */
+  display: none !important;
 }
 
 /* Achievements Modal */
@@ -2654,30 +2636,59 @@ header .subtitle {
   transform: scale(0.98);
 }
 
+.welcome-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  padding: 10px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  animation: pending-pulse 2s ease-in-out infinite;
+}
+
+@keyframes pending-pulse {
+  0%, 100% { background: rgba(239, 68, 68, 0.3); }
+  50% { background: rgba(239, 68, 68, 0.5); }
+}
+
+.welcome-pending-icon {
+  font-size: 20px;
+}
+
+.welcome-pending-text {
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* ==================== TASK BADGE (on achievements button) ==================== */
 
 .task-badge {
   position: absolute;
-  bottom: -2px;
-  left: -2px;
+  top: -4px;
+  right: -4px;
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: bold;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 8px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
+  padding: 0 5px;
   pointer-events: none;
   animation: task-pulse 2s ease-in-out infinite;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.5);
 }
 
 @keyframes task-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
+  0%, 100% { transform: scale(1); box-shadow: 0 2px 6px rgba(239, 68, 68, 0.5); }
+  50% { transform: scale(1.15); box-shadow: 0 3px 10px rgba(239, 68, 68, 0.7); }
 }
 
 /* ==================== END OF DAY TOAST ==================== */

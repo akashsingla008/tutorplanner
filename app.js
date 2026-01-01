@@ -3315,12 +3315,18 @@ function updateTaskBadge() {
   const unpaidCount = getUnpaidClassesCount();
 
   if (unpaidCount > 0) {
-    taskBadge.textContent = unpaidCount > 9 ? '9+' : unpaidCount;
+    taskBadge.textContent = `₹${unpaidCount}`;
     taskBadge.style.display = 'flex';
-    taskBadge.title = `${unpaidCount} unpaid class${unpaidCount > 1 ? 'es' : ''}`;
+    taskBadge.title = `${unpaidCount} unpaid class${unpaidCount > 1 ? 'es' : ''} - tap to collect payments`;
   } else {
     taskBadge.style.display = 'none';
   }
+}
+
+// Test function for end-of-day reminder (can be called from console or triggered for testing)
+function testEndOfDayReminder() {
+  console.log('Testing end-of-day reminder...');
+  showEndOfDayReminder();
 }
 
 function showEndOfDayToast(tasks) {
@@ -3639,6 +3645,15 @@ function showWelcomePopup() {
     greeting = "Good Evening";
   }
 
+  // Get pending tasks info
+  const unpaidCount = getUnpaidClassesCount();
+  const pendingTasksHtml = unpaidCount > 0
+    ? `<div class="welcome-pending">
+        <span class="welcome-pending-icon">💰</span>
+        <span class="welcome-pending-text">${unpaidCount} payment${unpaidCount > 1 ? 's' : ''} to collect</span>
+       </div>`
+    : '';
+
   // Create popup element
   const popup = document.createElement('div');
   popup.className = 'welcome-popup';
@@ -3647,6 +3662,7 @@ function showWelcomePopup() {
       <div class="welcome-emoji">👋</div>
       <h2 class="welcome-greeting">${greeting}, Mahak!</h2>
       <p class="welcome-message">${message}</p>
+      ${pendingTasksHtml}
       <div class="welcome-stats">
         <span class="welcome-stat">🔥 ${achievements.streak} day streak</span>
         <span class="welcome-stat">🏆 ${achievements.badges.length} badges</span>
