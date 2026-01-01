@@ -247,6 +247,9 @@ function setupEventListeners() {
   // Restore button
   document.getElementById("restoreBtn").addEventListener("click", handleRestoreClass);
 
+  // Notify Student about cancellation button
+  document.getElementById("notifyStudentCancelBtn").addEventListener("click", handleNotifyStudentCancellation);
+
   // Allow Clash button
   document.getElementById("allowClashBtn").addEventListener("click", handleAllowClash);
 
@@ -1577,6 +1580,69 @@ function handleRestoreClass() {
   renderWeekGrid();
 
   showToast("Class restored successfully!");
+}
+
+// Handle notifying student about class cancellation via WhatsApp
+function handleNotifyStudentCancellation() {
+  if (editingIndex === null) return;
+
+  const cls = classes[editingIndex];
+  if (!cls.cancelled) return;
+
+  const studentName = cls.student;
+  const startTime = formatTime(cls.start);
+  const endTime = formatTime(cls.end);
+
+  // Get the date of this class
+  let dateStr;
+  if (cls.date) {
+    const classDate = new Date(cls.date + 'T00:00:00');
+    dateStr = classDate.toLocaleDateString('en-IN', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short'
+    });
+  } else {
+    const nextDate = getNextDayDate(cls.day);
+    dateStr = nextDate.toLocaleDateString('en-IN', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short'
+    });
+  }
+
+  // Get cancellation reason
+  let reasonText = '';
+  if (cls.cancelReason === 'tutor') {
+    reasonText = 'due to my unavailability';
+  } else if (cls.cancelReason === 'holiday') {
+    reasonText = 'due to a holiday';
+  } else if (cls.cancelReason === 'other' && cls.customCancelReason) {
+    reasonText = `due to: ${cls.customCancelReason}`;
+  } else if (cls.cancelReason === 'student') {
+    reasonText = 'as per your request';
+  } else {
+    reasonText = 'due to unforeseen circumstances';
+  }
+
+  const message = `Hi ${studentName}!
+
+I'm sorry, but I need to cancel our scheduled class:
+
+📅 *${dateStr}*
+⏰ *${startTime} - ${endTime}*
+
+This class has been cancelled ${reasonText}.
+
+I'll reach out to reschedule soon. Sorry for any inconvenience!
+`;
+
+  // Open WhatsApp with the message
+  const encodedMessage = encodeURIComponent(message);
+  const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+  window.open(whatsappUrl, '_blank');
+
+  showToast("WhatsApp opened to notify student");
 }
 
 function handleDuplicate() {
