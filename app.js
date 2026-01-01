@@ -3327,10 +3327,21 @@ function initCelebrations() {
   updateHeaderStreakBadge();
 
   // Setup event listeners
-  document.getElementById('achievementsBtn').addEventListener('click', showAchievementsModal);
-  document.getElementById('closeAchievements').addEventListener('click', closeAchievementsModal);
+  document.getElementById('achievementsBtn').addEventListener('click', function() {
+    console.log('Achievements button clicked');
+    showAchievementsModal();
+  });
+
+  document.getElementById('closeAchievements').addEventListener('click', function() {
+    console.log('Close achievements button clicked');
+    closeAchievementsModal();
+  });
+
   document.getElementById('achievementsModal').addEventListener('click', (e) => {
-    if (e.target.id === 'achievementsModal') closeAchievementsModal();
+    if (e.target.id === 'achievementsModal') {
+      console.log('Modal backdrop clicked');
+      closeAchievementsModal();
+    }
   });
 
   // Check for badges silently on init (don't show popups)
@@ -3340,6 +3351,11 @@ function initCelebrations() {
   celebrationsInitialized = true;
 
   console.log('Celebrations initialized. Streak:', achievements.streak, 'Badges:', achievements.badges);
+
+  // Auto-show achievements modal on app load (brief flash)
+  setTimeout(() => {
+    showAchievementsModal();
+  }, 500);
 }
 
 // Confetti Animation
@@ -3557,12 +3573,17 @@ function showAchievementsModal() {
     </div>
   `;
 
+  console.log('Opening achievements modal');
   modal.classList.remove('hidden');
+  console.log('Modal hidden class removed. Classes now:', modal.className);
 }
 
 // Close achievements modal
 function closeAchievementsModal() {
-  document.getElementById('achievementsModal').classList.add('hidden');
+  const modal = document.getElementById('achievementsModal');
+  console.log('Closing achievements modal. Current classes:', modal.className);
+  modal.classList.add('hidden');
+  console.log('Modal hidden class added. Classes now:', modal.className);
 }
 
 // Save achievements
