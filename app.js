@@ -40,6 +40,14 @@ let allowClashOverride = false; // Flag to allow saving despite clash
 // Days of the week
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+// Format date to YYYY-MM-DD using local timezone (not UTC) - defined early for migration functions
+function formatDateToYYYYMMDD(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Working hours for auto-suggest (configurable)
 const WORKING_HOURS = { start: 8, end: 20 }; // 8 AM to 8 PM
 
@@ -157,7 +165,7 @@ function migrateClassesToDateFormat() {
       if (dayIndex !== -1) {
         const classDate = new Date(currentWeekStart);
         classDate.setDate(currentWeekStart.getDate() + dayIndex);
-        cls.date = classDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+        cls.date = formatDateToYYYYMMDD(classDate); // YYYY-MM-DD format
       }
     }
   });
@@ -172,7 +180,7 @@ function migrateClassesToDateFormat() {
 function cleanupOldClasses() {
   const threeMonthsAgo = new Date();
   threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-  const cutoffDate = threeMonthsAgo.toISOString().split('T')[0];
+  const cutoffDate = formatDateToYYYYMMDD(threeMonthsAgo);
 
   // Find old classes
   const oldClasses = classes.filter(cls => cls.date && cls.date < cutoffDate);
@@ -580,7 +588,7 @@ function copyAllToNextWeek() {
     const dayIndex = DAYS.indexOf(cls.day);
     const newDate = new Date(nextWeekStart);
     newDate.setDate(nextWeekStart.getDate() + dayIndex);
-    const newDateStr = newDate.toISOString().split('T')[0];
+    const newDateStr = formatDateToYYYYMMDD(newDate);
 
     const newClass = {
       ...cls,
@@ -616,7 +624,7 @@ function copyAllToNextWeek() {
 function copyMondayToWeekdays() {
   // Get Monday of current displayed week
   const currentWeekStart = getWeekStartDate(currentWeekOffset);
-  const mondayDateStr = currentWeekStart.toISOString().split('T')[0];
+  const mondayDateStr = formatDateToYYYYMMDD(currentWeekStart);
   const mondayClasses = classes.filter(c => c.date === mondayDateStr);
 
   if (mondayClasses.length === 0) {
@@ -633,7 +641,7 @@ function copyMondayToWeekdays() {
       // Calculate date for target day (Tue=1, Wed=2, Thu=3, Fri=4 offset from Monday)
       const targetDate = new Date(currentWeekStart);
       targetDate.setDate(currentWeekStart.getDate() + dayOffset + 1);
-      const targetDateStr = targetDate.toISOString().split('T')[0];
+      const targetDateStr = formatDateToYYYYMMDD(targetDate);
 
       const newClass = {
         ...mondayClass,
@@ -698,7 +706,7 @@ function showCopyClassDialog(classIndex) {
   const targetDayIndex = DAYS.indexOf(targetDay);
   const targetDate = new Date(weekStart);
   targetDate.setDate(weekStart.getDate() + targetDayIndex);
-  const targetDateStr = targetDate.toISOString().split('T')[0];
+  const targetDateStr = formatDateToYYYYMMDD(targetDate);
 
   const newClass = { ...cls, day: targetDay, date: targetDateStr };
 
@@ -740,7 +748,7 @@ function renderWeekGrid() {
   DAYS.forEach((day, index) => {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + index);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateToYYYYMMDD(date);
 
     const dayColumn = document.createElement("div");
     dayColumn.className = "day-column";
@@ -959,7 +967,7 @@ function handleDrop(e) {
   const targetDayIndex = DAYS.indexOf(targetDay);
   const targetDate = new Date(weekStart);
   targetDate.setDate(weekStart.getDate() + targetDayIndex);
-  const targetDateStr = targetDate.toISOString().split('T')[0];
+  const targetDateStr = formatDateToYYYYMMDD(targetDate);
 
   const newClass = { ...draggedClass, day: targetDay, date: targetDateStr };
 
@@ -1284,7 +1292,7 @@ function handleCopyToDays() {
     const dayIndex = DAYS.indexOf(day);
     const targetDate = new Date(weekStart);
     targetDate.setDate(weekStart.getDate() + dayIndex);
-    const targetDateStr = targetDate.toISOString().split('T')[0];
+    const targetDateStr = formatDateToYYYYMMDD(targetDate);
 
     const newClass = {
       student: studentName,
@@ -1337,7 +1345,7 @@ function handleFormSubmit(e) {
   const cls = {
     student: studentName,
     day: daySelect.value,
-    date: classDate.toISOString().split('T')[0], // YYYY-MM-DD format
+    date: formatDateToYYYYMMDD(classDate), // YYYY-MM-DD format
     start: startTimeInput.value,
     end: endTimeInput.value
   };
@@ -1721,7 +1729,7 @@ function checkFormClash() {
   const dayIndex = DAYS.indexOf(day);
   const classDate = new Date(weekStart);
   classDate.setDate(weekStart.getDate() + dayIndex);
-  const dateStr = classDate.toISOString().split('T')[0];
+  const dateStr = formatDateToYYYYMMDD(classDate);
 
   const testClass = { day, date: dateStr, start, end };
 
@@ -1938,7 +1946,7 @@ function isClassCompleted(cls) {
   // Check if the class date has passed
   if (cls.date) {
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = formatDateToYYYYMMDD(today);
 
     if (cls.date < todayStr) {
       return true; // Class date is in the past
@@ -2055,8 +2063,9 @@ function formatDateShort(date) {
 }
 
 function getClassesInRange(startDate, endDate) {
-  const startStr = startDate.toISOString().split('T')[0];
-  const endStr = endDate.toISOString().split('T')[0];
+  // Use local date strings to avoid timezone issues
+  const startStr = formatDateToYYYYMMDD(startDate);
+  const endStr = formatDateToYYYYMMDD(endDate);
 
   return classes.filter(cls => {
     if (!cls.date) return false;
@@ -2077,7 +2086,7 @@ function renderReport() {
   document.getElementById("reportPeriodLabel").textContent = label;
 
   // Create a period key for payment tracking
-  const periodKey = `${startDate.toISOString().split('T')[0]}_${endDate.toISOString().split('T')[0]}`;
+  const periodKey = `${formatDateToYYYYMMDD(startDate)}_${formatDateToYYYYMMDD(endDate)}`;
 
   // Get classes in range (for now, all classes since we don't have date-specific data)
   const classesInRange = getClassesInRange(startDate, endDate);
@@ -3306,7 +3315,7 @@ function checkEndOfDayReminder() {
 function checkBackupReminder() {
   const lastExportReminder = localStorage.getItem('lastExportReminder');
   const now = new Date();
-  const todayKey = now.toISOString().split('T')[0];
+  const todayKey = formatDateToYYYYMMDD(now);
 
   // Only show once per day and if 7+ days since last reminder
   if (lastExportReminder) {
@@ -3376,7 +3385,7 @@ function testEndOfDayReminder() {
 
 function showEndOfDayReminder() {
   // Get today's classes
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = formatDateToYYYYMMDD(new Date());
   const todayClasses = classes.filter(c => c.date === todayStr && !c.cancelled);
   const completedToday = todayClasses.filter(c => isClassCompleted(c)).length;
 
@@ -3424,7 +3433,7 @@ function getUnpaidClassesCount() {
 }
 
 function getPendingTasksCount() {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = formatDateToYYYYMMDD(new Date());
   const todayClasses = classes.filter(c => c.date === todayStr && !c.cancelled && isClassCompleted(c));
   const unpaidCount = getUnpaidClassesCount();
 
@@ -3926,7 +3935,7 @@ function launchConfetti() {
 
 // Update streak
 function updateStreak() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = formatDateToYYYYMMDD(new Date());
   const lastActive = achievements.lastActiveDate;
 
   if (!lastActive) {
