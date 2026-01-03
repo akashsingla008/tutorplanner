@@ -94,6 +94,7 @@ function init() {
   // Check if data was lost and auto-recover from backup
   checkAndRecoverData();
   migrateClassesToDateFormat();
+  fixTimezoneShiftedDates(); // Fix dates that were shifted due to UTC timezone bug
   cleanupOldClasses();
   renderWeekGrid();
   setupEventListeners();
@@ -174,6 +175,52 @@ function migrateClassesToDateFormat() {
     saveClasses();
     console.log('Migrated classes to date-based format');
   }
+}
+
+// Fix timezone-shifted dates (one-time migration for v75)
+function fixTimezoneShiftedDates() {
+  const migrationKey = 'timezoneDateFixV75';
+  if (localStorage.getItem(migrationKey)) {
+    return; // Already migrated
+  }
+
+  let fixedCount = 0;
+
+  classes.forEach((cls) => {
+    if (!cls.date || !cls.day) return;
+
+    // Parse the stored date
+    const storedDate = new Date(cls.date + 'T12:00:00'); // Use noon to avoid timezone issues
+    const storedDayOfWeek = storedDate.getDay(); // 0=Sun, 1=Mon, etc.
+
+    // Get expected day index from day name
+    const expectedDayIndex = DAYS.indexOf(cls.day); // 0=Mon, 1=Tue, etc.
+    // Convert to JS day format (0=Sun, 1=Mon)
+    const expectedJsDayOfWeek = expectedDayIndex === 6 ? 0 : expectedDayIndex + 1;
+
+    // If the day doesn't match, the date was shifted by timezone
+    if (storedDayOfWeek !== expectedJsDayOfWeek) {
+      // Calculate the difference and fix
+      let diff = expectedJsDayOfWeek - storedDayOfWeek;
+
+      // Handle week wraparound
+      if (diff > 3) diff -= 7;
+      if (diff < -3) diff += 7;
+
+      const correctedDate = new Date(storedDate);
+      correctedDate.setDate(storedDate.getDate() + diff);
+      cls.date = formatDateToYYYYMMDD(correctedDate);
+      fixedCount++;
+      console.log(`Fixed date for ${cls.student} ${cls.day}: ${cls.date}`);
+    }
+  });
+
+  if (fixedCount > 0) {
+    saveClasses();
+    console.log(`Fixed ${fixedCount} timezone-shifted dates`);
+  }
+
+  localStorage.setItem(migrationKey, 'true');
 }
 
 // Clean up classes older than 3 months (with automatic backup)
