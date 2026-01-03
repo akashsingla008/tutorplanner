@@ -2162,10 +2162,19 @@ function getClassesInRange(startDate, endDate) {
   const startStr = formatDateToYYYYMMDD(startDate);
   const endStr = formatDateToYYYYMMDD(endDate);
 
-  return classes.filter(cls => {
+  console.log(`getClassesInRange: ${startStr} to ${endStr}`);
+
+  const result = classes.filter(cls => {
     if (!cls.date) return false;
-    return cls.date >= startStr && cls.date <= endStr;
+    const inRange = cls.date >= startStr && cls.date <= endStr;
+    if (inRange) {
+      console.log(`  - ${cls.student} (${cls.day}) ${cls.date} - IN RANGE`);
+    }
+    return inRange;
   });
+
+  console.log(`  Total: ${result.length} classes`);
+  return result;
 }
 
 // Generate unique ID for a class for payment tracking
