@@ -2482,26 +2482,36 @@ function renderEarningsChart(classesInRange, _studentStats, periodKey, isClassCo
     dayEarnings[day] = { paid: 0, completed: 0, upcoming: 0 };
   });
 
-  // Calculate earnings for each class by day
+  // Calculate earnings for each class by the day of its actual date (not day name)
   classesInRange.forEach(cls => {
     if (cls.cancelled) return;
+
+    // Use the actual date to determine the day, not cls.day
+    // This ensures classes show on the correct day within the week
+    let dayName = cls.day;
+    if (cls.date) {
+      const classDate = new Date(cls.date + 'T12:00:00');
+      const dayIndex = classDate.getDay(); // 0=Sun, 1=Mon, etc.
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      dayName = dayNames[dayIndex];
+    }
 
     const rate = studentRates[cls.student] || defaultRate;
     const minutes = getMinutesBetween(cls.start, cls.end);
     const amount = Math.round((minutes / 60) * rate);
 
     if (cls.pendingConfirmation) {
-      dayEarnings[cls.day].upcoming += amount;
+      dayEarnings[dayName].upcoming += amount;
     } else if (isClassCompleted(cls)) {
       // Check if this student's payment is marked as paid for this period
       const paymentKey = `${cls.student}_${periodKey}`;
       if (paymentStatus[paymentKey]) {
-        dayEarnings[cls.day].paid += amount;
+        dayEarnings[dayName].paid += amount;
       } else {
-        dayEarnings[cls.day].completed += amount;
+        dayEarnings[dayName].completed += amount;
       }
     } else {
-      dayEarnings[cls.day].upcoming += amount;
+      dayEarnings[dayName].upcoming += amount;
     }
   });
 
