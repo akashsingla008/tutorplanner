@@ -114,7 +114,6 @@ function checkAndRecoverData() {
   // Try to recover from auto backups first
   const autoBackups = safeJsonParse('autoBackups', []);
   if (autoBackups.length > 0 && autoBackups[0].classes && autoBackups[0].classes.length > 0) {
-    console.log('Auto-recovering data from backup...');
     const backup = autoBackups[0];
     classes = backup.classes;
     studentRates = backup.studentRates || studentRates;
@@ -127,7 +126,6 @@ function checkAndRecoverData() {
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('defaultRate', defaultRate);
 
-    console.log(`Recovered ${classes.length} classes from auto backup`);
     showToast(`Recovered ${classes.length} classes from backup!`);
     return;
   }
@@ -135,7 +133,6 @@ function checkAndRecoverData() {
   // Try cleanup backups if no auto backups
   const cleanupBackups = safeJsonParse('cleanupBackups', []);
   if (cleanupBackups.length > 0 && cleanupBackups[0].allClasses && cleanupBackups[0].allClasses.length > 0) {
-    console.log('Auto-recovering data from cleanup backup...');
     const backup = cleanupBackups[0];
     classes = backup.allClasses;
     studentRates = backup.studentRates || studentRates;
@@ -148,7 +145,6 @@ function checkAndRecoverData() {
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('defaultRate', defaultRate);
 
-    console.log(`Recovered ${classes.length} classes from cleanup backup`);
     showToast(`Recovered ${classes.length} classes from backup!`);
   }
 }
@@ -173,7 +169,6 @@ function migrateClassesToDateFormat() {
 
   if (needsMigration) {
     saveClasses();
-    console.log('Migrated classes to date-based format');
   }
 }
 
@@ -211,13 +206,11 @@ function fixTimezoneShiftedDates() {
       correctedDate.setDate(storedDate.getDate() + diff);
       cls.date = formatDateToYYYYMMDD(correctedDate);
       fixedCount++;
-      console.log(`Fixed date for ${cls.student} ${cls.day}: ${cls.date}`);
     }
   });
 
   if (fixedCount > 0) {
     saveClasses();
-    console.log(`Fixed ${fixedCount} timezone-shifted dates`);
   }
 
   localStorage.setItem(migrationKey, 'true');
@@ -227,21 +220,17 @@ function fixTimezoneShiftedDates() {
 function forceFixTimezoneShiftedDates() {
   let fixedCount = 0;
 
-  console.log('=== Checking dates for all classes ===');
   classes.forEach((cls) => {
     if (!cls.date || !cls.day) return;
 
     // Parse the stored date
     const storedDate = new Date(cls.date + 'T12:00:00'); // Use noon to avoid timezone issues
     const storedDayOfWeek = storedDate.getDay(); // 0=Sun, 1=Mon, etc.
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     // Get expected day index from day name
     const expectedDayIndex = DAYS.indexOf(cls.day); // 0=Mon, 1=Tue, etc.
     // Convert to JS day format (0=Sun, 1=Mon)
     const expectedJsDayOfWeek = expectedDayIndex === 6 ? 0 : expectedDayIndex + 1;
-
-    console.log(`Class: ${cls.student}, Day: ${cls.day}, Date: ${cls.date}, Stored day: ${dayNames[storedDayOfWeek]}, Expected: ${dayNames[expectedJsDayOfWeek]}`);
 
     // If the day doesn't match, the date was shifted by timezone
     if (storedDayOfWeek !== expectedJsDayOfWeek) {
@@ -254,18 +243,13 @@ function forceFixTimezoneShiftedDates() {
 
       const correctedDate = new Date(storedDate);
       correctedDate.setDate(storedDate.getDate() + diff);
-      const oldDate = cls.date;
       cls.date = formatDateToYYYYMMDD(correctedDate);
       fixedCount++;
-      console.log(`  -> FIXED: ${oldDate} -> ${cls.date}`);
     }
   });
 
   if (fixedCount > 0) {
     saveClasses();
-    console.log(`Fixed ${fixedCount} timezone-shifted dates`);
-  } else {
-    console.log('No dates needed fixing');
   }
 
   return fixedCount;
@@ -307,8 +291,6 @@ function cleanupOldClasses() {
   // Remove old classes
   classes = classes.filter(cls => !cls.date || cls.date >= cutoffDate);
   saveClasses();
-
-  console.log(`Cleaned up ${oldClasses.length} classes older than ${cutoffDate}. Backup created.`);
 }
 
 // Event Listeners Setup
@@ -2162,19 +2144,10 @@ function getClassesInRange(startDate, endDate) {
   const startStr = formatDateToYYYYMMDD(startDate);
   const endStr = formatDateToYYYYMMDD(endDate);
 
-  console.log(`getClassesInRange: ${startStr} to ${endStr}`);
-
-  const result = classes.filter(cls => {
+  return classes.filter(cls => {
     if (!cls.date) return false;
-    const inRange = cls.date >= startStr && cls.date <= endStr;
-    if (inRange) {
-      console.log(`  - ${cls.student} (${cls.day}) ${cls.date} - IN RANGE`);
-    }
-    return inRange;
+    return cls.date >= startStr && cls.date <= endStr;
   });
-
-  console.log(`  Total: ${result.length} classes`);
-  return result;
 }
 
 // Generate unique ID for a class for payment tracking
@@ -3155,7 +3128,6 @@ let notifiedClasses = new Set(); // Track which classes we've already notified a
 function initNotifications() {
   // Check if notifications are supported
   if (!('Notification' in window)) {
-    console.log('Notifications not supported');
     return;
   }
 
@@ -3209,11 +3181,8 @@ function testNotification() {
 }
 
 function sendTestNotification() {
-  console.log('[Notification] sendTestNotification called');
-
   // Check notification permission first
   if (Notification.permission !== 'granted') {
-    console.log('[Notification] Permission not granted:', Notification.permission);
     showInAppAlert('Permission Required', 'Notification permission is: ' + Notification.permission + '. Please enable in settings.');
     return;
   }
@@ -3234,42 +3203,32 @@ function sendTestNotification() {
 
   // Check if service worker is available
   if (!('serviceWorker' in navigator)) {
-    console.log('[Notification] Service Worker not supported');
     showInAppAlert('Not Supported', 'Service Worker not available on this device');
     return;
   }
 
   // Get service worker registration
   navigator.serviceWorker.getRegistration().then(registration => {
-    console.log('[Notification] SW registration:', registration);
-
     if (!registration) {
-      console.log('[Notification] No SW registration found');
       showInAppAlert('Service Worker Error', 'No service worker registered. Try refreshing the app.');
       return;
     }
 
     if (!registration.active) {
-      console.log('[Notification] SW not active, state:', registration.installing ? 'installing' : registration.waiting ? 'waiting' : 'none');
       showInAppAlert('Service Worker Error', 'Service worker not active. Try refreshing the app.');
       return;
     }
 
-    console.log('[Notification] Calling showNotification...');
-
     // Show the notification
     registration.showNotification('Mindful Maths', options)
       .then(() => {
-        console.log('[Notification] showNotification succeeded');
         showToast('Notification sent! Check your notification panel.');
       })
       .catch(error => {
-        console.error('[Notification] showNotification error:', error);
         showInAppAlert('Notification Error', 'Failed to show notification: ' + error.message);
       });
 
   }).catch(error => {
-    console.error('[Notification] getRegistration error:', error);
     showInAppAlert('Service Worker Error', 'Could not get service worker: ' + error.message);
   });
 }
