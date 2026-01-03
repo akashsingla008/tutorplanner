@@ -227,17 +227,21 @@ function fixTimezoneShiftedDates() {
 function forceFixTimezoneShiftedDates() {
   let fixedCount = 0;
 
+  console.log('=== Checking dates for all classes ===');
   classes.forEach((cls) => {
     if (!cls.date || !cls.day) return;
 
     // Parse the stored date
     const storedDate = new Date(cls.date + 'T12:00:00'); // Use noon to avoid timezone issues
     const storedDayOfWeek = storedDate.getDay(); // 0=Sun, 1=Mon, etc.
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     // Get expected day index from day name
     const expectedDayIndex = DAYS.indexOf(cls.day); // 0=Mon, 1=Tue, etc.
     // Convert to JS day format (0=Sun, 1=Mon)
     const expectedJsDayOfWeek = expectedDayIndex === 6 ? 0 : expectedDayIndex + 1;
+
+    console.log(`Class: ${cls.student}, Day: ${cls.day}, Date: ${cls.date}, Stored day: ${dayNames[storedDayOfWeek]}, Expected: ${dayNames[expectedJsDayOfWeek]}`);
 
     // If the day doesn't match, the date was shifted by timezone
     if (storedDayOfWeek !== expectedJsDayOfWeek) {
@@ -250,15 +254,18 @@ function forceFixTimezoneShiftedDates() {
 
       const correctedDate = new Date(storedDate);
       correctedDate.setDate(storedDate.getDate() + diff);
+      const oldDate = cls.date;
       cls.date = formatDateToYYYYMMDD(correctedDate);
       fixedCount++;
-      console.log(`Fixed date for ${cls.student} ${cls.day}: ${cls.date}`);
+      console.log(`  -> FIXED: ${oldDate} -> ${cls.date}`);
     }
   });
 
   if (fixedCount > 0) {
     saveClasses();
     console.log(`Fixed ${fixedCount} timezone-shifted dates`);
+  } else {
+    console.log('No dates needed fixing');
   }
 
   return fixedCount;
@@ -2993,6 +3000,12 @@ function showBackupDialog() {
       </div>
 
       <div class="backup-section">
+        <h4>🔧 Fix Date Issues</h4>
+        <p>Fix classes showing in wrong week due to timezone bug</p>
+        <button class="btn btn-secondary" id="fixDatesBtn">Fix Dates Now</button>
+      </div>
+
+      <div class="backup-section">
         <h4>🔄 Auto Backups (Last 2 weeks)</h4>
         <div class="backup-list" id="backupList">
           ${backupListHtml}
@@ -3019,6 +3032,16 @@ function showBackupDialog() {
     document.getElementById('importFile').click();
   });
   document.getElementById('importFile').addEventListener('change', handleImportFile);
+  document.getElementById('fixDatesBtn').addEventListener('click', () => {
+    const fixedCount = forceFixTimezoneShiftedDates();
+    if (fixedCount > 0) {
+      renderWeekGrid();
+      renderReport();
+      showToast(`Fixed ${fixedCount} classes with date issues!`);
+    } else {
+      showToast('No date issues found - all dates are correct!');
+    }
+  });
   document.getElementById('closeBackupBtn').addEventListener('click', closeBackupDialog);
 
   // Event delegation for backup items
