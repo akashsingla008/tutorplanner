@@ -2248,7 +2248,10 @@ function renderReport() {
         upcomingMinutes: 0,
         paidClasses: 0,
         paidMinutes: 0,
-        completedClassIds: [] // Track individual completed class IDs
+        advancePaidClasses: 0,
+        advancePaidMinutes: 0,
+        completedClassIds: [], // Track individual completed class IDs
+        upcomingClassIds: [] // Track individual upcoming class IDs for advance payment
       };
     }
     studentStats[c.student].total++;
@@ -2259,11 +2262,10 @@ function renderReport() {
     } else {
       // Check if class is completed or upcoming
       const minutes = getMinutesBetween(c.start, c.end);
+      const classId = getClassPaymentId(c);
       if (isClassCompleted(c)) {
         studentStats[c.student].completed++;
         studentStats[c.student].completedMinutes += minutes;
-        // Generate unique class ID for payment tracking
-        const classId = getClassPaymentId(c);
         studentStats[c.student].completedClassIds.push(classId);
         // Check if this class is paid
         if (paymentStatus[classId]) {
@@ -2273,6 +2275,12 @@ function renderReport() {
       } else {
         studentStats[c.student].upcoming++;
         studentStats[c.student].upcomingMinutes += minutes;
+        studentStats[c.student].upcomingClassIds.push(classId);
+        // Check if this upcoming class has advance payment
+        if (paymentStatus[classId]) {
+          studentStats[c.student].advancePaidClasses++;
+          studentStats[c.student].advancePaidMinutes += minutes;
+        }
       }
     }
   });
@@ -2292,13 +2300,16 @@ function renderReport() {
       const completedClasses = stats.completed;
       const upcomingClasses = stats.upcoming;
       const paidClasses = stats.paidClasses;
+      const advancePaidClasses = stats.advancePaidClasses;
       const unpaidClasses = completedClasses - paidClasses;
       const completedHours = (stats.completedMinutes / 60).toFixed(1);
       const rate = studentRates[student] || defaultRate;
-      // Only calculate amount for completed classes
+      // Calculate amount for completed classes
       const amount = Math.round((stats.completedMinutes / 60) * rate);
       const paidAmountForStudent = Math.round((stats.paidMinutes / 60) * rate);
       const unpaidAmount = amount - paidAmountForStudent;
+      // Calculate advance payment amount for upcoming classes
+      const advancePaidAmount = Math.round((stats.advancePaidMinutes / 60) * rate);
       totalAmount += amount;
       paidAmount += paidAmountForStudent;
 
@@ -2309,27 +2320,35 @@ function renderReport() {
       const hasCompletedClasses = completedClasses > 0;
       const hasUpcomingClasses = upcomingClasses > 0;
       const hasPendingClasses = stats.pending > 0;
+      const hasAdvancePayment = advancePaidClasses > 0;
 
       // Row color logic:
       // - Green: all completed classes are paid
       // - Light green: has completed but not all paid
       // - Amber: only upcoming or pending classes (no completed)
       // - Mixed (light yellow): has both completed and upcoming/pending
+      // - Blue tint: has advance payment for upcoming
       let rowClass = '';
       if (!hasCompletedClasses && (hasUpcomingClasses || hasPendingClasses)) {
-        rowClass = 'report-row-pending'; // Only upcoming/pending - amber
+        rowClass = hasAdvancePayment ? 'report-row-advance' : 'report-row-pending';
       } else if (hasCompletedClasses && (hasUpcomingClasses || hasPendingClasses)) {
-        rowClass = 'report-row-mixed'; // Mix of completed and upcoming - light yellow
+        rowClass = 'report-row-mixed';
       } else if (hasCompletedClasses) {
-        rowClass = allPaid ? 'report-row-paid' : 'report-row-confirmed'; // Green shades
+        rowClass = allPaid ? 'report-row-paid' : 'report-row-confirmed';
       }
 
       // Build badges for upcoming and pending
       const badges = [];
-      if (hasUpcomingClasses) badges.push(`${upcomingClasses} upcoming`);
+      if (hasUpcomingClasses) {
+        if (hasAdvancePayment) {
+          badges.push(`${advancePaidClasses}/${upcomingClasses} prepaid`);
+        } else {
+          badges.push(`${upcomingClasses} upcoming`);
+        }
+      }
       if (hasPendingClasses) badges.push(`${stats.pending} awaiting`);
 
-      // Payment status display
+      // Payment status display for completed classes
       let paymentDisplay = '';
       if (hasCompletedClasses) {
         if (allPaid) {
@@ -2351,6 +2370,27 @@ function renderReport() {
         }
       }
 
+      // Advance payment display for upcoming classes
+      let advanceDisplay = '';
+      if (hasUpcomingClasses && !hasPendingClasses) {
+        if (advancePaidClasses === upcomingClasses) {
+          advanceDisplay = `<span class="payment-status advance-paid">💰 Prepaid (${advancePaidClasses})</span>`;
+        } else if (advancePaidClasses > 0) {
+          advanceDisplay = `
+            <span class="payment-status advance-partial">${advancePaidClasses}/${upcomingClasses} Prepaid</span>
+            <button class="advance-pay-btn" data-student="${escapeHtml(student)}" data-class-ids="${stats.upcomingClassIds.join(',')}" title="Record advance payment">
+              + Advance
+            </button>
+          `;
+        } else {
+          advanceDisplay = `
+            <button class="advance-pay-btn" data-student="${escapeHtml(student)}" data-class-ids="${stats.upcomingClassIds.join(',')}" title="Record advance payment">
+              💰 Advance Pay
+            </button>
+          `;
+        }
+      }
+
       return `
         <tr class="${rowClass}">
           <td>
@@ -2366,7 +2406,10 @@ function renderReport() {
                    value="${rate}"
                    min="0" step="50" />
           </td>
-          <td class="amount">${hasCompletedClasses ? `₹${amount.toLocaleString()}${unpaidAmount > 0 ? ` <span class="unpaid-amount">(₹${unpaidAmount.toLocaleString()} unpaid)</span>` : ''}` : '-'}</td>
+          <td class="amount">
+            ${hasCompletedClasses ? `₹${amount.toLocaleString()}${unpaidAmount > 0 ? ` <span class="unpaid-amount">(₹${unpaidAmount.toLocaleString()} unpaid)</span>` : ''}` : '-'}
+            ${hasUpcomingClasses && advancePaidAmount > 0 ? `<br><span class="advance-amount">+₹${advancePaidAmount.toLocaleString()} prepaid</span>` : ''}
+          </td>
           <td class="payment-cell">
             ${hasCompletedClasses ? `
               ${paymentDisplay}
@@ -2375,11 +2418,12 @@ function renderReport() {
                   📩
                 </button>
               ` : ''}
-            ` : hasPendingClasses ? `
+            ` : ''}
+            ${hasUpcomingClasses && !hasCompletedClasses ? advanceDisplay : ''}
+            ${hasUpcomingClasses && hasCompletedClasses ? `<div class="advance-section">${advanceDisplay}</div>` : ''}
+            ${!hasCompletedClasses && !hasUpcomingClasses && hasPendingClasses ? `
               <span class="awaiting-confirm-label">Awaiting confirmation</span>
-            ` : `
-              <span class="upcoming-label">Upcoming</span>
-            `}
+            ` : ''}
           </td>
         </tr>
       `;
@@ -2431,6 +2475,15 @@ function renderReport() {
         const studentClasses = classes.filter(c => c.student === student && !c.cancelled);
         const days = [...new Set(studentClasses.map(c => c.day))];
         sendPaymentReminder(student, amount, label, classCount, hours, days);
+      });
+    });
+
+    // Add event listeners to advance payment buttons
+    tbody.querySelectorAll('.advance-pay-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const student = e.target.dataset.student;
+        const classIds = e.target.dataset.classIds.split(',');
+        showAdvancePaymentDialog(student, classIds);
       });
     });
   }
@@ -2758,6 +2811,130 @@ function showMarkPaidDialog(student, classIds) {
 
 function closeMarkPaidDialog() {
   const dialog = document.getElementById('markPaidDialog');
+  if (dialog) dialog.remove();
+}
+
+// Show dialog to record advance payments for upcoming classes
+function showAdvancePaymentDialog(student, classIds) {
+  // Find the actual class details for each class ID
+  const classDetails = classIds.map(classId => {
+    const parts = classId.split('_');
+    // Format: student_date_start_end
+    const date = parts[1];
+    const start = parts[2];
+    const end = parts[3];
+    const isPaid = paymentStatus[classId] || false;
+    const rate = studentRates[student] || defaultRate;
+    const minutes = getMinutesBetween(start, end);
+    const amount = Math.round((minutes / 60) * rate);
+
+    // Format date nicely
+    const dateObj = new Date(date + 'T00:00:00');
+    const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+
+    return { classId, date, dateStr, start, end, isPaid, amount };
+  });
+
+  // Sort by date
+  classDetails.sort((a, b) => a.date.localeCompare(b.date));
+
+  // Calculate total
+  const totalAmount = classDetails.reduce((sum, cls) => sum + cls.amount, 0);
+  const paidAmount = classDetails.filter(cls => cls.isPaid).reduce((sum, cls) => sum + cls.amount, 0);
+
+  const dialogHtml = `
+    <div class="mark-paid-dialog-content advance-payment-dialog">
+      <h3>💰 Advance Payment - ${escapeHtml(student)}</h3>
+      <p class="dialog-subtitle">Select upcoming classes paid in advance:</p>
+      <div class="advance-summary">
+        <span>Total: ₹${totalAmount.toLocaleString()}</span>
+        <span class="advance-paid-summary">Prepaid: ₹${paidAmount.toLocaleString()}</span>
+      </div>
+      <div class="class-payment-list">
+        ${classDetails.map(cls => `
+          <label class="class-payment-item advance-item ${cls.isPaid ? 'paid' : ''}">
+            <input type="checkbox" class="class-paid-checkbox" data-class-id="${cls.classId}" ${cls.isPaid ? 'checked' : ''} />
+            <span class="class-info">
+              <span class="class-date">${cls.dateStr}</span>
+              <span class="class-time">${formatTime(cls.start)} - ${formatTime(cls.end)}</span>
+            </span>
+            <span class="class-amount">₹${cls.amount.toLocaleString()}</span>
+          </label>
+        `).join('')}
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="markAllAdvanceBtn">Select All</button>
+        <button class="btn btn-primary" id="saveAdvanceBtn">Save Advance Payment</button>
+        <button class="btn btn-secondary" id="cancelAdvanceBtn">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  // Create dialog overlay
+  const dialog = document.createElement('div');
+  dialog.id = 'advancePaymentDialog';
+  dialog.className = 'modal';
+  dialog.innerHTML = `<div class="modal-content">${dialogHtml}</div>`;
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) closeAdvancePaymentDialog();
+  });
+  document.body.appendChild(dialog);
+
+  // Update summary when checkboxes change
+  const updateSummary = () => {
+    let newPaidAmount = 0;
+    dialog.querySelectorAll('.class-paid-checkbox:checked').forEach(cb => {
+      const classId = cb.dataset.classId;
+      const cls = classDetails.find(c => c.classId === classId);
+      if (cls) newPaidAmount += cls.amount;
+    });
+    dialog.querySelector('.advance-paid-summary').textContent = `Prepaid: ₹${newPaidAmount.toLocaleString()}`;
+  };
+
+  // Event listeners
+  document.getElementById('markAllAdvanceBtn').addEventListener('click', () => {
+    dialog.querySelectorAll('.class-paid-checkbox').forEach(cb => {
+      cb.checked = true;
+      cb.closest('.class-payment-item').classList.add('paid');
+    });
+    updateSummary();
+  });
+
+  document.getElementById('saveAdvanceBtn').addEventListener('click', () => {
+    let newAdvanceCount = 0;
+    dialog.querySelectorAll('.class-paid-checkbox').forEach(cb => {
+      const classId = cb.dataset.classId;
+      const wasChecked = paymentStatus[classId];
+      paymentStatus[classId] = cb.checked;
+      if (cb.checked && !wasChecked) newAdvanceCount++;
+    });
+    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    closeAdvancePaymentDialog();
+
+    if (newAdvanceCount > 0) {
+      showToast(`✅ Recorded advance payment for ${newAdvanceCount} class${newAdvanceCount > 1 ? 'es' : ''}!`);
+    }
+
+    renderReport();
+  });
+
+  document.getElementById('cancelAdvanceBtn').addEventListener('click', closeAdvancePaymentDialog);
+
+  // Update visual state when checkbox changes
+  dialog.querySelectorAll('.class-paid-checkbox').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        e.target.closest('.class-payment-item').classList.add('paid');
+      } else {
+        e.target.closest('.class-payment-item').classList.remove('paid');
+      }
+      updateSummary();
+    });
+  });
+}
+
+function closeAdvancePaymentDialog() {
+  const dialog = document.getElementById('advancePaymentDialog');
   if (dialog) dialog.remove();
 }
 

@@ -3195,6 +3195,68 @@ header .subtitle {
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
 }
 
+/* Advance Payment Styles */
+.advance-pay-btn {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 6px;
+  transition: all 0.2s;
+}
+
+.advance-pay-btn:hover {
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+}
+
+.payment-status.advance-paid {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.payment-status.advance-partial {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.advance-amount {
+  font-size: 11px;
+  color: #7c3aed;
+  font-weight: 500;
+}
+
+.advance-section {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.report-row-advance {
+  background: #f5f3ff !important;
+}
+
+.advance-payment-dialog .advance-summary {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #f5f3ff;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.advance-payment-dialog .advance-paid-summary {
+  color: #7c3aed;
+}
+
+.advance-payment-dialog .advance-item.paid {
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+}
+
 .unpaid-amount {
   font-size: 11px;
   color: #dc2626;
