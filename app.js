@@ -20,6 +20,26 @@ function safeJsonParse(key, defaultValue) {
   }
 }
 
+// Request persistent storage to prevent browser from auto-evicting data
+async function requestPersistentStorage() {
+  if (navigator.storage && navigator.storage.persist) {
+    const isPersisted = await navigator.storage.persisted();
+    if (!isPersisted) {
+      const result = await navigator.storage.persist();
+      if (!result) {
+        // Storage persistence was denied - warn user on first occurrence
+        const warned = localStorage.getItem('persistenceWarningShown');
+        if (!warned) {
+          setTimeout(() => {
+            showToast('⚠️ Browser may clear data when storage is low. Please export backups regularly!', 8000);
+            localStorage.setItem('persistenceWarningShown', 'true');
+          }, 3000);
+        }
+      }
+    }
+  }
+}
+
 let classes = safeJsonParse("classes", []);
 let editingIndex = null;
 let currentWeekOffset = 0;
@@ -91,6 +111,8 @@ const endTimeInput = document.getElementById("endTime");
 document.addEventListener("DOMContentLoaded", init);
 
 function init() {
+  // Request persistent storage to prevent browser from auto-evicting data
+  requestPersistentStorage();
   // Check if data was lost and auto-recover from backup
   checkAndRecoverData();
   migrateClassesToDateFormat();
@@ -109,6 +131,22 @@ function init() {
 
 // Auto-recover data if classes array is empty but backups exist
 function checkAndRecoverData() {
+  // Log data status for debugging
+  const dataStatus = {
+    classesCount: classes.length,
+    hasAutoBackups: safeJsonParse('autoBackups', []).length > 0,
+    hasCleanupBackups: safeJsonParse('cleanupBackups', []).length > 0,
+    timestamp: new Date().toISOString()
+  };
+
+  // Track data loss events
+  if (classes.length === 0) {
+    const lossEvents = safeJsonParse('dataLossEvents', []);
+    lossEvents.unshift(dataStatus);
+    // Keep only last 10 events
+    localStorage.setItem('dataLossEvents', JSON.stringify(lossEvents.slice(0, 10)));
+  }
+
   if (classes.length > 0) return; // Data exists, no recovery needed
 
   // Try to recover from auto backups first
@@ -126,7 +164,7 @@ function checkAndRecoverData() {
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('defaultRate', defaultRate);
 
-    showToast(`Recovered ${classes.length} classes from backup!`);
+    showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
     return;
   }
 
@@ -145,7 +183,7 @@ function checkAndRecoverData() {
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('defaultRate', defaultRate);
 
-    showToast(`Recovered ${classes.length} classes from backup!`);
+    showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
   }
 }
 
@@ -2941,9 +2979,18 @@ function getStoragePercentage() {
   return Math.min((used / limit) * 100, 100);
 }
 
+// Check if storage is persisted (protected from browser eviction)
+async function getStoragePersistenceStatus() {
+  if (navigator.storage && navigator.storage.persisted) {
+    return await navigator.storage.persisted();
+  }
+  return null; // API not supported
+}
+
 // Show backup/restore dialog
-function showBackupDialog() {
+async function showBackupDialog() {
   const backups = safeJsonParse('autoBackups', []);
+  const isPersisted = await getStoragePersistenceStatus();
 
   let backupListHtml = '';
   if (backups.length > 0) {
@@ -2963,9 +3010,19 @@ function showBackupDialog() {
   const storagePercent = getStoragePercentage();
   const storageClass = storagePercent > 80 ? 'warning' : storagePercent > 60 ? 'caution' : 'good';
 
+  // Storage persistence status
+  let persistenceHtml = '';
+  if (isPersisted === true) {
+    persistenceHtml = '<div class="persistence-status good">🛡️ Storage Protected - Data will not be auto-deleted</div>';
+  } else if (isPersisted === false) {
+    persistenceHtml = '<div class="persistence-status warning">⚠️ Storage NOT Protected - Browser may delete data when storage is low. Export backups regularly!</div>';
+  }
+
   const dialogHtml = `
     <div class="backup-dialog-content">
       <h3>Data Backup & Restore</h3>
+
+      ${persistenceHtml}
 
       <div class="storage-indicator ${storageClass}">
         <div class="storage-header">
