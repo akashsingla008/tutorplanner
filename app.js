@@ -3227,24 +3227,14 @@ function getMarksProgressChart(student) {
 
   if (marksNotes.length < 2) return '';
 
-  // Calculate percentages and find max for scaling
+  // Calculate percentages
   const dataPoints = marksNotes.slice(-8).map(n => ({
     percentage: Math.round((n.marksObtained / n.marksTotal) * 100),
     date: new Date(n.noteDate || n.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-    score: `${n.marksObtained}/${n.marksTotal}`
+    score: `${n.marksObtained}/${n.marksTotal}`,
+    obtained: n.marksObtained,
+    total: n.marksTotal
   }));
-
-  const bars = dataPoints.map(point => {
-    const colorClass = point.percentage >= 80 ? 'excellent' :
-                       point.percentage >= 60 ? 'good' :
-                       point.percentage >= 40 ? 'average' : 'needs-work';
-    return `
-      <div class="marks-bar-container" title="${point.score} (${point.percentage}%)">
-        <div class="marks-bar ${colorClass}" style="height: ${point.percentage}%"></div>
-        <span class="marks-bar-label">${point.date}</span>
-      </div>
-    `;
-  }).join('');
 
   const latestPercentage = dataPoints[dataPoints.length - 1].percentage;
   const firstPercentage = dataPoints[0].percentage;
@@ -3252,14 +3242,102 @@ function getMarksProgressChart(student) {
   const trendIcon = improvement > 0 ? '📈' : improvement < 0 ? '📉' : '➡️';
   const trendClass = improvement > 0 ? 'positive' : improvement < 0 ? 'negative' : 'neutral';
 
+  // Calculate average
+  const avgPercentage = Math.round(dataPoints.reduce((sum, p) => sum + p.percentage, 0) / dataPoints.length);
+
+  // Create SVG line chart
+  const chartWidth = 280;
+  const chartHeight = 100;
+  const padding = 5;
+  const pointSpacing = (chartWidth - padding * 2) / (dataPoints.length - 1);
+
+  // Generate path for line
+  const pathPoints = dataPoints.map((point, i) => {
+    const x = padding + (i * pointSpacing);
+    const y = chartHeight - padding - ((point.percentage / 100) * (chartHeight - padding * 2));
+    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+
+  // Generate dots and labels
+  const dots = dataPoints.map((point, i) => {
+    const x = padding + (i * pointSpacing);
+    const y = chartHeight - padding - ((point.percentage / 100) * (chartHeight - padding * 2));
+    const colorClass = point.percentage >= 80 ? '#22c55e' :
+                       point.percentage >= 60 ? '#3b82f6' :
+                       point.percentage >= 40 ? '#f59e0b' : '#ef4444';
+    return `
+      <circle cx="${x}" cy="${y}" r="6" fill="${colorClass}" stroke="white" stroke-width="2" class="chart-dot" />
+      <text x="${x}" y="${y - 10}" text-anchor="middle" class="chart-percentage">${point.percentage}%</text>
+    `;
+  }).join('');
+
+  // Create area under line (gradient fill)
+  const areaPath = pathPoints + ` L ${padding + (dataPoints.length - 1) * pointSpacing} ${chartHeight - padding} L ${padding} ${chartHeight - padding} Z`;
+
+  // Generate test cards
+  const testCards = dataPoints.map((point, i) => {
+    const colorClass = point.percentage >= 80 ? 'excellent' :
+                       point.percentage >= 60 ? 'good' :
+                       point.percentage >= 40 ? 'average' : 'needs-work';
+    const isLatest = i === dataPoints.length - 1;
+    return `
+      <div class="test-card ${colorClass} ${isLatest ? 'latest' : ''}">
+        <div class="test-score">${point.obtained}/${point.total}</div>
+        <div class="test-percent">${point.percentage}%</div>
+        <div class="test-date">${point.date}</div>
+      </div>
+    `;
+  }).join('');
+
   return `
     <div class="marks-progress-section">
       <div class="marks-chart-header">
-        <span class="marks-chart-title">Performance Trend</span>
+        <span class="marks-chart-title">📊 Performance Trend</span>
         <span class="marks-trend ${trendClass}">${trendIcon} ${improvement > 0 ? '+' : ''}${improvement}%</span>
       </div>
-      <div class="marks-chart">
-        ${bars}
+
+      <div class="marks-stats-row">
+        <div class="stat-item">
+          <span class="stat-value">${avgPercentage}%</span>
+          <span class="stat-label">Average</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">${Math.max(...dataPoints.map(p => p.percentage))}%</span>
+          <span class="stat-label">Best</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">${dataPoints.length}</span>
+          <span class="stat-label">Tests</span>
+        </div>
+        <div class="stat-item latest-score">
+          <span class="stat-value">${latestPercentage}%</span>
+          <span class="stat-label">Latest</span>
+        </div>
+      </div>
+
+      <div class="marks-line-chart">
+        <svg viewBox="0 0 ${chartWidth} ${chartHeight}" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.3" />
+              <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.05" />
+            </linearGradient>
+          </defs>
+          <!-- Grid lines -->
+          <line x1="${padding}" y1="${chartHeight - padding - (80/100) * (chartHeight - padding*2)}" x2="${chartWidth - padding}" y2="${chartHeight - padding - (80/100) * (chartHeight - padding*2)}" stroke="#22c55e" stroke-opacity="0.2" stroke-dasharray="4" />
+          <line x1="${padding}" y1="${chartHeight - padding - (60/100) * (chartHeight - padding*2)}" x2="${chartWidth - padding}" y2="${chartHeight - padding - (60/100) * (chartHeight - padding*2)}" stroke="#3b82f6" stroke-opacity="0.2" stroke-dasharray="4" />
+          <line x1="${padding}" y1="${chartHeight - padding - (40/100) * (chartHeight - padding*2)}" x2="${chartWidth - padding}" y2="${chartHeight - padding - (40/100) * (chartHeight - padding*2)}" stroke="#f59e0b" stroke-opacity="0.2" stroke-dasharray="4" />
+          <!-- Area fill -->
+          <path d="${areaPath}" fill="url(#chartGradient)" />
+          <!-- Line -->
+          <path d="${pathPoints}" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+          <!-- Dots -->
+          ${dots}
+        </svg>
+      </div>
+
+      <div class="test-cards-scroll">
+        ${testCards}
       </div>
     </div>
   `;
@@ -3573,6 +3651,7 @@ function closeNoteModal() {
 function updateNoteDateFieldVisibility(category) {
   const dateGroup = document.getElementById('noteDateGroup');
   const marksGroup = document.getElementById('marksFieldsGroup');
+  const noteOptionalHint = document.getElementById('noteOptionalHint');
 
   if (dateGroup) {
     // Show date field for exam, dates, homework, and marks categories
@@ -3589,6 +3668,11 @@ function updateNoteDateFieldVisibility(category) {
   if (marksGroup) {
     // Show marks fields only for marks category
     marksGroup.style.display = category === 'marks' ? 'block' : 'none';
+  }
+
+  // Show optional hint for marks category
+  if (noteOptionalHint) {
+    noteOptionalHint.style.display = category === 'marks' ? 'inline' : 'none';
   }
 }
 

@@ -4240,3 +4240,112 @@ header .subtitle {
   text-align: center;
   white-space: nowrap;
 }
+
+/* Line Chart Styles */
+.marks-stats-row {
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 8px;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.latest-score {
+  font-size: 14px;
+}
+
+.marks-line-chart {
+  position: relative;
+  padding: 10px 0;
+}
+
+.marks-line-chart svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chart-percentage {
+  font-size: 9px;
+  fill: #94a3b8;
+}
+
+.test-cards-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 0 4px 0;
+  margin-top: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.test-cards-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.test-cards-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.test-cards-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+
+.test-card {
+  flex-shrink: 0;
+  min-width: 70px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+}
+
+.test-card .test-score {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.test-card .test-percent {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 2px 0;
+}
+
+.test-card .test-percent.excellent { color: #22c55e; }
+.test-card .test-percent.good { color: #3b82f6; }
+.test-card .test-percent.average { color: #f59e0b; }
+.test-card .test-percent.needs-work { color: #ef4444; }
+
+.test-card .test-date {
+  font-size: 9px;
+  color: #94a3b8;
+}
+
+/* Optional hint for form fields */
+.optional-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 400;
+}
