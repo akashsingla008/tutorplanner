@@ -2200,10 +2200,7 @@ function renderReport() {
   // Update period label
   document.getElementById("reportPeriodLabel").textContent = label;
 
-  // Create a period key for payment tracking
-  const periodKey = `${formatDateToYYYYMMDD(startDate)}_${formatDateToYYYYMMDD(endDate)}`;
-
-  // Get classes in range (for now, all classes since we don't have date-specific data)
+  // Get classes in range
   const classesInRange = getClassesInRange(startDate, endDate);
 
   // Use global isClassCompleted function which properly checks cls.date
@@ -2451,11 +2448,11 @@ function renderReport() {
     : '<span class="paid-indicator">All Paid ✓</span>';
 
   // Render earnings chart
-  renderEarningsChart(classesInRange, studentStats, periodKey, isClassCompleted);
+  renderEarningsChart(classesInRange, studentStats, isClassCompleted);
 }
 
 // Render earnings chart
-function renderEarningsChart(classesInRange, _studentStats, periodKey, isClassCompleted) {
+function renderEarningsChart(classesInRange, _studentStats, isClassCompleted) {
   const chartContainer = document.getElementById('earningsChart');
   if (!chartContainer) return;
 
@@ -2489,9 +2486,9 @@ function renderEarningsChart(classesInRange, _studentStats, periodKey, isClassCo
     if (cls.pendingConfirmation) {
       dayEarnings[dayName].upcoming += amount;
     } else if (isClassCompleted(cls)) {
-      // Check if this student's payment is marked as paid for this period
-      const paymentKey = `${cls.student}_${periodKey}`;
-      if (paymentStatus[paymentKey]) {
+      // Check if this class is marked as paid (per-class tracking)
+      const classPaymentId = getClassPaymentId(cls);
+      if (paymentStatus[classPaymentId]) {
         dayEarnings[dayName].paid += amount;
       } else {
         dayEarnings[dayName].completed += amount;
@@ -2573,15 +2570,26 @@ function renderEarningsChart(classesInRange, _studentStats, periodKey, isClassCo
       const total = paid + completed + upcoming;
 
       if (total > 0) {
-        showChartDayDetails(day, paid, completed, upcoming, classesInRange, isClassCompleted, periodKey);
+        showChartDayDetails(day, paid, completed, upcoming, classesInRange, isClassCompleted);
       }
     });
   });
 }
 
 // Show detailed breakdown for a day when clicked
-function showChartDayDetails(day, paid, completed, upcoming, classesInRange, isClassCompleted, periodKey) {
-  const dayClasses = classesInRange.filter(c => c.day === day && !c.cancelled);
+function showChartDayDetails(day, paid, completed, upcoming, classesInRange, isClassCompleted) {
+  // Filter classes by their actual date's day of week (matching chart logic)
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayClasses = classesInRange.filter(c => {
+    if (c.cancelled) return false;
+    // Derive day from actual date (consistent with chart rendering)
+    if (c.date) {
+      const classDate = new Date(c.date + 'T12:00:00');
+      const classDayName = dayNames[classDate.getDay()];
+      return classDayName === day;
+    }
+    return c.day === day;
+  });
 
   let detailsHtml = `<div class="chart-details-popup">
     <div class="chart-details-header">
@@ -2606,8 +2614,8 @@ function showChartDayDetails(day, paid, completed, upcoming, classesInRange, isC
       status = 'pending';
       statusLabel = 'Awaiting';
     } else if (isClassCompleted(cls)) {
-      const paymentKey = `${cls.student}_${periodKey}`;
-      if (paymentStatus[paymentKey]) {
+      const classPaymentId = getClassPaymentId(cls);
+      if (paymentStatus[classPaymentId]) {
         status = 'paid';
         statusLabel = 'Paid';
       } else {
@@ -3119,6 +3127,9 @@ function restoreAutoBackup(index) {
     // Migrate imported classes to include date field if missing
     migrateClassesToDateFormat();
 
+    // Fix timezone-shifted dates (backup may have old bad dates)
+    forceFixTimezoneShiftedDates();
+
     // Refresh UI
     renderWeekGrid();
     updateStudentDropdowns();
@@ -3284,19 +3295,19 @@ function checkUpcomingClasses() {
   if (!notificationsEnabled) return;
 
   const now = new Date();
-  const currentDay = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1]; // Convert to our day format
+  const todayStr = formatDateToYYYYMMDD(now);
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  // Get today's confirmed classes (exclude cancelled and pending confirmation)
-  const todayClasses = classes.filter(c => c.day === currentDay && !c.cancelled && !c.pendingConfirmation);
+  // Get today's confirmed classes by date (exclude cancelled and pending confirmation)
+  const todayClasses = classes.filter(c => c.date === todayStr && !c.cancelled && !c.pendingConfirmation);
 
   todayClasses.forEach(c => {
     const [hours, minutes] = c.start.split(':').map(Number);
     const classMinutes = hours * 60 + minutes;
     const minutesUntilClass = classMinutes - currentMinutes;
 
-    // Create unique ID for this class instance (day + time + student)
-    const classId = `${currentDay}-${c.start}-${c.student}`;
+    // Create unique ID for this class instance (date + time + student)
+    const classId = `${todayStr}-${c.start}-${c.student}`;
 
     // Notify if class is 14-16 minutes away (to handle minute boundaries)
     if (minutesUntilClass >= 14 && minutesUntilClass <= 16 && !notifiedClasses.has(classId)) {
@@ -3739,11 +3750,12 @@ function toggleNotifications() {
 // Show next class info (for debugging)
 function showNextClassInfo() {
   const now = new Date();
+  const todayStr = formatDateToYYYYMMDD(now);
   const currentDay = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1];
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   const todayClasses = classes
-    .filter(c => c.day === currentDay && !c.cancelled && !c.pendingConfirmation)
+    .filter(c => c.date === todayStr && !c.cancelled && !c.pendingConfirmation)
     .sort((a, b) => a.start.localeCompare(b.start));
 
   if (todayClasses.length === 0) {
