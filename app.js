@@ -3172,6 +3172,7 @@ function copyReminderToClipboard(message, student) {
 // ==================== PROGRESS NOTES FUNCTIONS ====================
 
 const NOTE_CATEGORIES = {
+  marks: { label: 'Marks', icon: '🎯' },
   exam: { label: 'Exam', icon: '📝' },
   syllabus: { label: 'Syllabus', icon: '📚' },
   homework: { label: 'Homework', icon: '📋' },
@@ -3218,6 +3219,52 @@ function updateNoteStudentDropdown() {
     students.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
 }
 
+// Get marks progress chart HTML for a student
+function getMarksProgressChart(student) {
+  const marksNotes = progressNotes
+    .filter(n => n.category === 'marks' && n.student === student && n.marksObtained !== undefined)
+    .sort((a, b) => new Date(a.noteDate || a.createdAt) - new Date(b.noteDate || b.createdAt));
+
+  if (marksNotes.length < 2) return '';
+
+  // Calculate percentages and find max for scaling
+  const dataPoints = marksNotes.slice(-8).map(n => ({
+    percentage: Math.round((n.marksObtained / n.marksTotal) * 100),
+    date: new Date(n.noteDate || n.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+    subject: n.subject || 'Test'
+  }));
+
+  const bars = dataPoints.map((point, i) => {
+    const colorClass = point.percentage >= 80 ? 'excellent' :
+                       point.percentage >= 60 ? 'good' :
+                       point.percentage >= 40 ? 'average' : 'needs-work';
+    return `
+      <div class="marks-bar-container" title="${point.subject}: ${point.percentage}%">
+        <div class="marks-bar ${colorClass}" style="height: ${point.percentage}%"></div>
+        <span class="marks-bar-label">${point.date}</span>
+      </div>
+    `;
+  }).join('');
+
+  const latestPercentage = dataPoints[dataPoints.length - 1].percentage;
+  const firstPercentage = dataPoints[0].percentage;
+  const improvement = latestPercentage - firstPercentage;
+  const trendIcon = improvement > 0 ? '📈' : improvement < 0 ? '📉' : '➡️';
+  const trendClass = improvement > 0 ? 'positive' : improvement < 0 ? 'negative' : 'neutral';
+
+  return `
+    <div class="marks-progress-section">
+      <div class="marks-chart-header">
+        <span class="marks-chart-title">Performance Trend</span>
+        <span class="marks-trend ${trendClass}">${trendIcon} ${improvement > 0 ? '+' : ''}${improvement}%</span>
+      </div>
+      <div class="marks-chart">
+        ${bars}
+      </div>
+    </div>
+  `;
+}
+
 // Render progress notes list
 function renderProgressNotes() {
   const container = document.getElementById('progressNotesList');
@@ -3239,15 +3286,21 @@ function renderProgressNotes() {
     return new Date(b.createdAt) - new Date(a.createdAt);
   });
 
+  // Show marks progress chart if viewing marks for a specific student
+  let marksChartHtml = '';
+  if (studentFilter && (currentNoteCategory === 'all' || currentNoteCategory === 'marks')) {
+    marksChartHtml = getMarksProgressChart(studentFilter);
+  }
+
   if (filteredNotes.length === 0) {
     const emptyMessage = studentFilter
       ? `No notes for ${studentFilter} yet.`
       : 'No notes yet. Add your first note to track student progress!';
-    container.innerHTML = `<p class="empty-state">${emptyMessage}</p>`;
+    container.innerHTML = marksChartHtml + `<p class="empty-state">${emptyMessage}</p>`;
     return;
   }
 
-  container.innerHTML = filteredNotes.map(note => {
+  container.innerHTML = marksChartHtml + filteredNotes.map(note => {
     const category = NOTE_CATEGORIES[note.category] || NOTE_CATEGORIES.general;
     const createdDate = new Date(note.createdAt);
     const dateStr = createdDate.toLocaleDateString('en-IN', {
@@ -3258,7 +3311,7 @@ function renderProgressNotes() {
 
     // Check if note has an associated date (for exams/important dates)
     let noteDateDisplay = '';
-    if (note.noteDate) {
+    if (note.noteDate && note.category !== 'marks') {
       const noteDate = new Date(note.noteDate + 'T00:00:00');
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -3290,13 +3343,39 @@ function renderProgressNotes() {
       `;
     }
 
+    // Special display for marks
+    let marksDisplay = '';
+    if (note.category === 'marks' && note.marksObtained !== undefined) {
+      const percentage = Math.round((note.marksObtained / note.marksTotal) * 100);
+      const gradeClass = percentage >= 80 ? 'excellent' :
+                         percentage >= 60 ? 'good' :
+                         percentage >= 40 ? 'average' : 'needs-work';
+      const testDate = note.noteDate ? new Date(note.noteDate + 'T00:00:00').toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', year: 'numeric'
+      }) : '';
+
+      marksDisplay = `
+        <div class="marks-display">
+          <div class="marks-score">
+            <span class="marks-obtained">${note.marksObtained}</span>
+            <span class="marks-separator">/</span>
+            <span class="marks-total">${note.marksTotal}</span>
+          </div>
+          <div class="marks-percentage ${gradeClass}">${percentage}%</div>
+          ${note.subject ? `<div class="marks-subject">${escapeHtml(note.subject)}</div>` : ''}
+          ${testDate ? `<div class="marks-test-date">📅 ${testDate}</div>` : ''}
+        </div>
+      `;
+    }
+
     return `
-      <div class="progress-note-card ${note.pinned ? 'pinned' : ''}" data-note-id="${note.id}">
+      <div class="progress-note-card ${note.pinned ? 'pinned' : ''} ${note.category === 'marks' ? 'marks-card' : ''}" data-note-id="${note.id}">
         <div class="note-header">
           <span class="note-category ${note.category}">${category.icon} ${category.label}</span>
           <span class="note-student">${escapeHtml(note.student)}</span>
           ${note.pinned ? '<span class="note-pin">📌</span>' : ''}
         </div>
+        ${marksDisplay}
         ${noteDateDisplay}
         <div class="note-content">${escapeHtml(note.content)}</div>
         <div class="note-footer">
@@ -3373,6 +3452,14 @@ function editNote(noteId) {
   document.getElementById('notePinned').checked = note.pinned || false;
   document.getElementById('noteDate').value = note.noteDate || '';
 
+  // Fill marks fields if applicable
+  const marksObtainedInput = document.getElementById('marksObtained');
+  const marksTotalInput = document.getElementById('marksTotal');
+  const subjectInput = document.getElementById('marksSubject');
+  if (marksObtainedInput) marksObtainedInput.value = note.marksObtained || '';
+  if (marksTotalInput) marksTotalInput.value = note.marksTotal || 100;
+  if (subjectInput) subjectInput.value = note.subject || '';
+
   // Set category
   document.querySelectorAll('.note-category-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.category === note.category);
@@ -3391,6 +3478,11 @@ function saveNote() {
   const noteDate = document.getElementById('noteDate').value;
   const category = document.querySelector('.note-category-btn.active')?.dataset.category || 'general';
 
+  // Get marks fields if category is marks
+  const marksObtained = parseInt(document.getElementById('marksObtained')?.value) || null;
+  const marksTotal = parseInt(document.getElementById('marksTotal')?.value) || 100;
+  const subject = document.getElementById('marksSubject')?.value.trim() || null;
+
   if (!student) {
     showToast('Please select a student');
     return;
@@ -3399,6 +3491,22 @@ function saveNote() {
   if (!content) {
     showToast('Please enter a note');
     return;
+  }
+
+  // Validate marks if category is marks
+  if (category === 'marks') {
+    if (!marksObtained && marksObtained !== 0) {
+      showToast('Please enter marks obtained');
+      return;
+    }
+    if (marksObtained > marksTotal) {
+      showToast('Marks obtained cannot exceed total marks');
+      return;
+    }
+    if (!noteDate) {
+      showToast('Please enter the test date');
+      return;
+    }
   }
 
   if (editingNoteId) {
@@ -3412,6 +3520,9 @@ function saveNote() {
         category,
         pinned,
         noteDate: noteDate || null,
+        marksObtained: category === 'marks' ? marksObtained : undefined,
+        marksTotal: category === 'marks' ? marksTotal : undefined,
+        subject: category === 'marks' ? subject : undefined,
         updatedAt: new Date().toISOString()
       };
       showToast('Note updated!');
@@ -3425,6 +3536,9 @@ function saveNote() {
       category,
       pinned,
       noteDate: noteDate || null,
+      marksObtained: category === 'marks' ? marksObtained : undefined,
+      marksTotal: category === 'marks' ? marksTotal : undefined,
+      subject: category === 'marks' ? subject : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -3460,10 +3574,23 @@ function closeNoteModal() {
 // Update date field visibility based on category
 function updateNoteDateFieldVisibility(category) {
   const dateGroup = document.getElementById('noteDateGroup');
+  const marksGroup = document.getElementById('marksFieldsGroup');
+
   if (dateGroup) {
-    // Show date field for exam and dates categories
-    const showDate = ['exam', 'dates', 'homework'].includes(category);
+    // Show date field for exam, dates, homework, and marks categories
+    const showDate = ['exam', 'dates', 'homework', 'marks'].includes(category);
     dateGroup.style.display = showDate ? 'block' : 'none';
+
+    // Update label for marks
+    const dateLabel = dateGroup.querySelector('label');
+    if (dateLabel) {
+      dateLabel.textContent = category === 'marks' ? 'Test Date' : 'Date (for exams/important dates)';
+    }
+  }
+
+  if (marksGroup) {
+    // Show marks fields only for marks category
+    marksGroup.style.display = category === 'marks' ? 'block' : 'none';
   }
 }
 

@@ -214,6 +214,7 @@
 
   <div class="progress-filters">
     <button class="category-filter active" data-category="all">All</button>
+    <button class="category-filter" data-category="marks">🎯 Marks</button>
     <button class="category-filter" data-category="exam">📝 Exams</button>
     <button class="category-filter" data-category="syllabus">📚 Syllabus</button>
     <button class="category-filter" data-category="homework">📋 Homework</button>
@@ -246,12 +247,27 @@
       <div class="form-group">
         <label>Category</label>
         <div class="note-category-buttons">
+          <button type="button" class="note-category-btn" data-category="marks">🎯 Marks</button>
           <button type="button" class="note-category-btn" data-category="exam">📝 Exam</button>
           <button type="button" class="note-category-btn" data-category="syllabus">📚 Syllabus</button>
           <button type="button" class="note-category-btn" data-category="homework">📋 Homework</button>
           <button type="button" class="note-category-btn" data-category="dates">📅 Important Date</button>
           <button type="button" class="note-category-btn" data-category="progress">📈 Progress</button>
           <button type="button" class="note-category-btn active" data-category="general">💬 General</button>
+        </div>
+      </div>
+
+      <div class="form-group" id="marksFieldsGroup" style="display: none;">
+        <label>Test Score</label>
+        <div class="marks-input-row">
+          <div class="marks-input-group">
+            <input type="number" id="marksObtained" placeholder="Obtained" min="0" />
+            <span class="marks-divider">/</span>
+            <input type="number" id="marksTotal" placeholder="Total" min="1" value="100" />
+          </div>
+        </div>
+        <div class="marks-subject-row">
+          <input type="text" id="marksSubject" placeholder="Subject (e.g., Maths, Science)" />
         </div>
       </div>
 

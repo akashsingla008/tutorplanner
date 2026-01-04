@@ -4036,3 +4036,229 @@ header .subtitle {
   outline: none;
   border-color: #3d8fc4;
 }
+
+/* Marks Category Styles */
+.note-category.marks {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+}
+
+.marks-card {
+  border-left: 4px solid #f59e0b;
+}
+
+/* Marks Input Fields */
+.marks-input-row {
+  margin-bottom: 10px;
+}
+
+.marks-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.marks-input-group input {
+  width: 100px;
+  padding: 10px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.marks-input-group input:focus {
+  outline: none;
+  border-color: #f59e0b;
+}
+
+.marks-divider {
+  font-size: 20px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.marks-subject-row input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.marks-subject-row input:focus {
+  outline: none;
+  border-color: #f59e0b;
+}
+
+/* Marks Display in Card */
+.marks-display {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 12px;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-radius: 10px;
+  border: 1px solid #fde68a;
+}
+
+.marks-score {
+  display: flex;
+  align-items: baseline;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.marks-obtained {
+  font-size: 28px;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.marks-separator {
+  font-size: 20px;
+  color: #b45309;
+  margin: 0 2px;
+}
+
+.marks-total {
+  font-size: 18px;
+  color: #b45309;
+}
+
+.marks-percentage {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.marks-percentage.excellent {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.marks-percentage.good {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.marks-percentage.average {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.marks-percentage.needs-work {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.marks-subject {
+  font-size: 13px;
+  font-weight: 600;
+  color: #78350f;
+  background: #fef3c7;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.marks-test-date {
+  font-size: 12px;
+  color: #92400e;
+  margin-left: auto;
+}
+
+/* Marks Progress Chart */
+.marks-progress-section {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 2px solid #fde68a;
+}
+
+.marks-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.marks-chart-title {
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+}
+
+.marks-trend {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.marks-trend.positive {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.marks-trend.negative {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.marks-trend.neutral {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.marks-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+  padding: 10px 0;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.marks-bar-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  min-width: 35px;
+}
+
+.marks-bar {
+  width: 100%;
+  max-width: 30px;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+}
+
+.marks-bar.excellent {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+}
+
+.marks-bar.good {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.marks-bar.average {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+}
+
+.marks-bar.needs-work {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+}
+
+.marks-bar-label {
+  font-size: 9px;
+  color: #6b7280;
+  margin-top: 6px;
+  text-align: center;
+  white-space: nowrap;
+}
