@@ -165,6 +165,9 @@ function checkAndRecoverData() {
     advanceCredits = backup.advanceCredits || advanceCredits;
     progressNotes = backup.progressNotes || progressNotes;
     defaultRate = backup.defaultRate || defaultRate;
+    if (backup.achievements) {
+      achievements = backup.achievements;
+    }
 
     // Save recovered data
     saveClasses();
@@ -173,6 +176,7 @@ function checkAndRecoverData() {
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
     localStorage.setItem('defaultRate', defaultRate);
+    localStorage.setItem('achievements', JSON.stringify(achievements));
 
     showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
     return;
@@ -188,6 +192,9 @@ function checkAndRecoverData() {
     advanceCredits = backup.advanceCredits || advanceCredits;
     progressNotes = backup.progressNotes || progressNotes;
     defaultRate = backup.defaultRate || defaultRate;
+    if (backup.achievements) {
+      achievements = backup.achievements;
+    }
 
     // Save recovered data
     saveClasses();
@@ -196,6 +203,7 @@ function checkAndRecoverData() {
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
     localStorage.setItem('defaultRate', defaultRate);
+    localStorage.setItem('achievements', JSON.stringify(achievements));
 
     showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
   }
@@ -332,7 +340,8 @@ function cleanupOldClasses() {
     paymentStatus: paymentStatus,
     advanceCredits: advanceCredits,
     progressNotes: progressNotes,
-    defaultRate: defaultRate
+    defaultRate: defaultRate,
+    achievements: achievements
   };
 
   // Store cleanup backup separately
@@ -3828,7 +3837,8 @@ function createAutoBackup() {
     paymentStatus: paymentStatus,
     advanceCredits: advanceCredits,
     progressNotes: progressNotes,
-    defaultRate: defaultRate
+    defaultRate: defaultRate,
+    achievements: achievements
   };
 
   // Get existing backups
@@ -3848,14 +3858,15 @@ function createAutoBackup() {
 function exportData() {
   const exportData = {
     exportDate: new Date().toISOString(),
-    version: '5.0', // v5.0: Added progressNotes for student progress tracking
+    version: '6.0', // v6.0: Added achievements for gamification
     data: {
       classes: classes,
       studentRates: studentRates,
       paymentStatus: paymentStatus,
       advanceCredits: advanceCredits,
       progressNotes: progressNotes,
-      defaultRate: defaultRate
+      defaultRate: defaultRate,
+      achievements: achievements
     }
   };
 
@@ -3894,6 +3905,10 @@ function importData(file) {
         advanceCredits = importedData.data.advanceCredits || {};
         progressNotes = importedData.data.progressNotes || [];
         defaultRate = importedData.data.defaultRate || 500;
+        // Import achievements if present (backwards compatible with older backups)
+        if (importedData.data.achievements) {
+          achievements = importedData.data.achievements;
+        }
 
         // Save to localStorage
         saveClasses();
@@ -3902,6 +3917,7 @@ function importData(file) {
         localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
         localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
         localStorage.setItem('defaultRate', defaultRate);
+        localStorage.setItem('achievements', JSON.stringify(achievements));
 
         // Migrate imported classes to include date field if missing
         migrateClassesToDateFormat();
@@ -4114,6 +4130,10 @@ function restoreAutoBackup(index) {
     advanceCredits = backup.advanceCredits || {};
     progressNotes = backup.progressNotes || [];
     defaultRate = backup.defaultRate || 500;
+    // Restore achievements if present (backwards compatible with older backups)
+    if (backup.achievements) {
+      achievements = backup.achievements;
+    }
 
     // Save to localStorage
     saveClasses();
@@ -4122,6 +4142,7 @@ function restoreAutoBackup(index) {
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
     localStorage.setItem('defaultRate', defaultRate);
+    localStorage.setItem('achievements', JSON.stringify(achievements));
 
     // Migrate imported classes to include date field if missing
     migrateClassesToDateFormat();
