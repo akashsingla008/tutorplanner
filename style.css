@@ -3169,6 +3169,11 @@ header .subtitle {
   color: #065f46;
 }
 
+.payment-status.paid.credit-paid {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
 .payment-status.partial {
   background: #fef3c7;
   color: #92400e;

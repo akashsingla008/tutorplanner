@@ -2254,7 +2254,14 @@ function renderReport() {
 
   // Calculate per-student stats with individual class tracking
   const studentStats = {};
-  classesInRange.forEach(c => {
+
+  // Sort classes by date to apply credit in chronological order (oldest first)
+  const sortedClasses = [...classesInRange].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return a.start.localeCompare(b.start);
+  });
+
+  sortedClasses.forEach(c => {
     if (!studentStats[c.student]) {
       studentStats[c.student] = {
         total: 0,
@@ -2285,10 +2292,33 @@ function renderReport() {
         studentStats[c.student].completed++;
         studentStats[c.student].completedMinutes += minutes;
         studentStats[c.student].completedClassIds.push(classId);
-        // Check if this class is paid
+        // Check if this class is paid (either manually or auto-applied from credit)
         if (paymentStatus[classId]) {
           studentStats[c.student].paidClasses++;
           studentStats[c.student].paidMinutes += minutes;
+        } else {
+          // Auto-apply advance credit if available
+          const rate = studentRates[c.student] || defaultRate;
+          const classCost = Math.round((minutes / 60) * rate);
+          const currentCredit = advanceCredits[c.student] || 0;
+
+          if (currentCredit >= classCost && classCost > 0) {
+            // Auto-pay this class from credit (store 'credit' as source)
+            paymentStatus[classId] = 'credit';
+            advanceCredits[c.student] = currentCredit - classCost;
+
+            // Save the updated status
+            localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+            localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
+
+            // Count as paid
+            studentStats[c.student].paidClasses++;
+            studentStats[c.student].paidMinutes += minutes;
+            if (!studentStats[c.student].creditPaidClasses) {
+              studentStats[c.student].creditPaidClasses = 0;
+            }
+            studentStats[c.student].creditPaidClasses++;
+          }
         }
       } else {
         studentStats[c.student].upcoming++;
@@ -2370,12 +2400,23 @@ function renderReport() {
 
       // Payment status display for completed classes
       let paymentDisplay = '';
+      const creditPaidClasses = stats.creditPaidClasses || 0;
+      const manualPaidClasses = paidClasses - creditPaidClasses;
+
       if (hasCompletedClasses) {
         if (allPaid) {
-          paymentDisplay = `<span class="payment-status paid">✓ All Paid (${paidClasses})</span>`;
+          // Show breakdown if some were paid from credit
+          if (creditPaidClasses > 0 && manualPaidClasses > 0) {
+            paymentDisplay = `<span class="payment-status paid">✓ All Paid (${manualPaidClasses} manual, ${creditPaidClasses} from credit)</span>`;
+          } else if (creditPaidClasses > 0) {
+            paymentDisplay = `<span class="payment-status paid credit-paid">✓ All Paid from Credit (${creditPaidClasses})</span>`;
+          } else {
+            paymentDisplay = `<span class="payment-status paid">✓ All Paid (${paidClasses})</span>`;
+          }
         } else if (paidClasses > 0) {
+          const paidText = creditPaidClasses > 0 ? `${paidClasses}/${completedClasses} Paid (${creditPaidClasses} from credit)` : `${paidClasses}/${completedClasses} Paid`;
           paymentDisplay = `
-            <span class="payment-status partial">${paidClasses}/${completedClasses} Paid</span>
+            <span class="payment-status partial">${paidText}</span>
             <button class="mark-paid-btn" data-student="${escapeHtml(student)}" data-class-ids="${stats.completedClassIds.join(',')}" title="Mark classes as paid">
               Mark Paid
             </button>
