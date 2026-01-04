@@ -4078,19 +4078,6 @@ header .subtitle {
   color: #6b7280;
 }
 
-.marks-subject-row input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 14px;
-}
-
-.marks-subject-row input:focus {
-  outline: none;
-  border-color: #f59e0b;
-}
-
 /* Marks Display in Card */
 .marks-display {
   display: flex;
@@ -4152,15 +4139,6 @@ header .subtitle {
 .marks-percentage.needs-work {
   background: #fee2e2;
   color: #dc2626;
-}
-
-.marks-subject {
-  font-size: 13px;
-  font-weight: 600;
-  color: #78350f;
-  background: #fef3c7;
-  padding: 4px 10px;
-  border-radius: 12px;
 }
 
 .marks-test-date {

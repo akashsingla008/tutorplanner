@@ -3231,15 +3231,15 @@ function getMarksProgressChart(student) {
   const dataPoints = marksNotes.slice(-8).map(n => ({
     percentage: Math.round((n.marksObtained / n.marksTotal) * 100),
     date: new Date(n.noteDate || n.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-    subject: n.subject || 'Test'
+    score: `${n.marksObtained}/${n.marksTotal}`
   }));
 
-  const bars = dataPoints.map((point, i) => {
+  const bars = dataPoints.map(point => {
     const colorClass = point.percentage >= 80 ? 'excellent' :
                        point.percentage >= 60 ? 'good' :
                        point.percentage >= 40 ? 'average' : 'needs-work';
     return `
-      <div class="marks-bar-container" title="${point.subject}: ${point.percentage}%">
+      <div class="marks-bar-container" title="${point.score} (${point.percentage}%)">
         <div class="marks-bar ${colorClass}" style="height: ${point.percentage}%"></div>
         <span class="marks-bar-label">${point.date}</span>
       </div>
@@ -3362,7 +3362,6 @@ function renderProgressNotes() {
             <span class="marks-total">${note.marksTotal}</span>
           </div>
           <div class="marks-percentage ${gradeClass}">${percentage}%</div>
-          ${note.subject ? `<div class="marks-subject">${escapeHtml(note.subject)}</div>` : ''}
           ${testDate ? `<div class="marks-test-date">📅 ${testDate}</div>` : ''}
         </div>
       `;
@@ -3455,10 +3454,8 @@ function editNote(noteId) {
   // Fill marks fields if applicable
   const marksObtainedInput = document.getElementById('marksObtained');
   const marksTotalInput = document.getElementById('marksTotal');
-  const subjectInput = document.getElementById('marksSubject');
   if (marksObtainedInput) marksObtainedInput.value = note.marksObtained || '';
   if (marksTotalInput) marksTotalInput.value = note.marksTotal || 100;
-  if (subjectInput) subjectInput.value = note.subject || '';
 
   // Set category
   document.querySelectorAll('.note-category-btn').forEach(btn => {
@@ -3481,14 +3478,15 @@ function saveNote() {
   // Get marks fields if category is marks
   const marksObtained = parseInt(document.getElementById('marksObtained')?.value) || null;
   const marksTotal = parseInt(document.getElementById('marksTotal')?.value) || 100;
-  const subject = document.getElementById('marksSubject')?.value.trim() || null;
+  const subject = 'Maths'; // Always Maths for this tutor app
 
   if (!student) {
     showToast('Please select a student');
     return;
   }
 
-  if (!content) {
+  // Note is optional for marks, required for other categories
+  if (!content && category !== 'marks') {
     showToast('Please enter a note');
     return;
   }
