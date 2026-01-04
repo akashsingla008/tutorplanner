@@ -4338,6 +4338,16 @@ header .subtitle {
 .test-card .test-percent.average { color: #f59e0b; }
 .test-card .test-percent.needs-work { color: #ef4444; }
 
+.test-card.excellent { border-color: #22c55e; background: #f0fdf4; }
+.test-card.good { border-color: #3b82f6; background: #eff6ff; }
+.test-card.average { border-color: #f59e0b; background: #fffbeb; }
+.test-card.needs-work { border-color: #ef4444; background: #fef2f2; }
+
+.test-card.latest {
+  border-width: 2px;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
 .test-card .test-date {
   font-size: 9px;
   color: #94a3b8;
