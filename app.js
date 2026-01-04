@@ -54,6 +54,9 @@ let defaultRate = parseInt(localStorage.getItem('defaultRate')) || 500;
 let studentRates = safeJsonParse('studentRates', {});
 let paymentStatus = safeJsonParse('paymentStatus', {});
 let advanceCredits = safeJsonParse('advanceCredits', {}); // Track advance payment credits per student
+let progressNotes = safeJsonParse('progressNotes', []); // Track student progress notes
+let editingNoteId = null; // Track which note is being edited
+let currentNoteCategory = 'all'; // Current filter category for progress view
 let isSelectMode = false;
 let selectedClasses = new Set();
 let allowClashOverride = false; // Flag to allow saving despite clash
@@ -128,6 +131,7 @@ function init() {
   startClassReminderCheck();
   startEndOfDayReminderCheck();
   initCelebrations();
+  initProgressView();
 }
 
 // Auto-recover data if classes array is empty but backups exist
@@ -158,6 +162,7 @@ function checkAndRecoverData() {
     studentRates = backup.studentRates || studentRates;
     paymentStatus = backup.paymentStatus || paymentStatus;
     advanceCredits = backup.advanceCredits || advanceCredits;
+    progressNotes = backup.progressNotes || progressNotes;
     defaultRate = backup.defaultRate || defaultRate;
 
     // Save recovered data
@@ -165,6 +170,7 @@ function checkAndRecoverData() {
     localStorage.setItem('studentRates', JSON.stringify(studentRates));
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
+    localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
     localStorage.setItem('defaultRate', defaultRate);
 
     showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
@@ -179,6 +185,7 @@ function checkAndRecoverData() {
     studentRates = backup.studentRates || studentRates;
     paymentStatus = backup.paymentStatus || paymentStatus;
     advanceCredits = backup.advanceCredits || advanceCredits;
+    progressNotes = backup.progressNotes || progressNotes;
     defaultRate = backup.defaultRate || defaultRate;
 
     // Save recovered data
@@ -186,6 +193,7 @@ function checkAndRecoverData() {
     localStorage.setItem('studentRates', JSON.stringify(studentRates));
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
+    localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
     localStorage.setItem('defaultRate', defaultRate);
 
     showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
@@ -322,6 +330,7 @@ function cleanupOldClasses() {
     studentRates: studentRates,
     paymentStatus: paymentStatus,
     advanceCredits: advanceCredits,
+    progressNotes: progressNotes,
     defaultRate: defaultRate
   };
 
@@ -615,6 +624,9 @@ function switchView(viewName) {
     updateStudentDropdowns();
   } else if (viewName === "reports") {
     renderReport();
+  } else if (viewName === "progress") {
+    updateProgressStudentDropdown();
+    renderProgressNotes();
   }
 }
 
@@ -3157,6 +3169,349 @@ function copyReminderToClipboard(message, student) {
   });
 }
 
+// ==================== PROGRESS NOTES FUNCTIONS ====================
+
+const NOTE_CATEGORIES = {
+  exam: { label: 'Exam', icon: '📝' },
+  syllabus: { label: 'Syllabus', icon: '📚' },
+  homework: { label: 'Homework', icon: '📋' },
+  dates: { label: 'Important Date', icon: '📅' },
+  progress: { label: 'Progress', icon: '📈' },
+  general: { label: 'General', icon: '💬' }
+};
+
+// Generate unique ID for notes
+function generateNoteId() {
+  return 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// Save progress notes to localStorage
+function saveProgressNotes() {
+  localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
+}
+
+// Update progress student dropdown
+function updateProgressStudentDropdown() {
+  const select = document.getElementById('progressStudentSelect');
+  if (!select) return;
+
+  const students = [...new Set(classes.map(c => c.student))].sort();
+  const currentValue = select.value;
+
+  select.innerHTML = '<option value="">-- All Students --</option>' +
+    students.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+
+  // Restore selection if still valid
+  if (currentValue && students.includes(currentValue)) {
+    select.value = currentValue;
+  }
+}
+
+// Update note modal student dropdown
+function updateNoteStudentDropdown() {
+  const select = document.getElementById('noteStudentSelect');
+  if (!select) return;
+
+  const students = [...new Set(classes.map(c => c.student))].sort();
+
+  select.innerHTML = '<option value="">-- Select Student --</option>' +
+    students.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+}
+
+// Render progress notes list
+function renderProgressNotes() {
+  const container = document.getElementById('progressNotesList');
+  if (!container) return;
+
+  const studentFilter = document.getElementById('progressStudentSelect')?.value || '';
+
+  // Filter notes by student and category
+  let filteredNotes = progressNotes.filter(note => {
+    const studentMatch = !studentFilter || note.student === studentFilter;
+    const categoryMatch = currentNoteCategory === 'all' || note.category === currentNoteCategory;
+    return studentMatch && categoryMatch;
+  });
+
+  // Sort: pinned first, then by date (newest first)
+  filteredNotes.sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+
+  if (filteredNotes.length === 0) {
+    const emptyMessage = studentFilter
+      ? `No notes for ${studentFilter} yet.`
+      : 'No notes yet. Add your first note to track student progress!';
+    container.innerHTML = `<p class="empty-state">${emptyMessage}</p>`;
+    return;
+  }
+
+  container.innerHTML = filteredNotes.map(note => {
+    const category = NOTE_CATEGORIES[note.category] || NOTE_CATEGORIES.general;
+    const createdDate = new Date(note.createdAt);
+    const dateStr = createdDate.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: createdDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+    });
+
+    // Check if note has an associated date (for exams/important dates)
+    let noteDateDisplay = '';
+    if (note.noteDate) {
+      const noteDate = new Date(note.noteDate + 'T00:00:00');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysUntil = Math.ceil((noteDate - today) / (1000 * 60 * 60 * 24));
+
+      let urgencyClass = '';
+      let urgencyText = '';
+      if (daysUntil < 0) {
+        urgencyClass = 'past';
+        urgencyText = 'Past';
+      } else if (daysUntil === 0) {
+        urgencyClass = 'today';
+        urgencyText = 'Today!';
+      } else if (daysUntil <= 3) {
+        urgencyClass = 'urgent';
+        urgencyText = `${daysUntil} day${daysUntil > 1 ? 's' : ''} left`;
+      } else if (daysUntil <= 7) {
+        urgencyClass = 'soon';
+        urgencyText = `${daysUntil} days left`;
+      } else {
+        urgencyText = noteDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      }
+
+      noteDateDisplay = `
+        <div class="note-target-date ${urgencyClass}">
+          <span class="target-date-icon">🎯</span>
+          <span class="target-date-value">${urgencyText}</span>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="progress-note-card ${note.pinned ? 'pinned' : ''}" data-note-id="${note.id}">
+        <div class="note-header">
+          <span class="note-category ${note.category}">${category.icon} ${category.label}</span>
+          <span class="note-student">${escapeHtml(note.student)}</span>
+          ${note.pinned ? '<span class="note-pin">📌</span>' : ''}
+        </div>
+        ${noteDateDisplay}
+        <div class="note-content">${escapeHtml(note.content)}</div>
+        <div class="note-footer">
+          <span class="note-date">${dateStr}</span>
+          <div class="note-actions">
+            <button class="note-edit-btn" data-note-id="${note.id}" title="Edit">✏️</button>
+            <button class="note-delete-btn" data-note-id="${note.id}" title="Delete">🗑️</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add event listeners
+  container.querySelectorAll('.note-edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editNote(btn.dataset.noteId);
+    });
+  });
+
+  container.querySelectorAll('.note-delete-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteNote(btn.dataset.noteId);
+    });
+  });
+
+  // Click on card to edit
+  container.querySelectorAll('.progress-note-card').forEach(card => {
+    card.addEventListener('click', () => {
+      editNote(card.dataset.noteId);
+    });
+  });
+}
+
+// Open note modal for adding
+function openAddNoteModal() {
+  editingNoteId = null;
+  document.getElementById('noteModalTitle').textContent = 'Add Note';
+  document.getElementById('deleteNoteBtn').classList.add('hidden');
+
+  // Reset form
+  document.getElementById('noteForm').reset();
+  document.getElementById('noteStudentSelect').value =
+    document.getElementById('progressStudentSelect')?.value || '';
+
+  // Reset category selection
+  document.querySelectorAll('.note-category-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.category === 'general');
+  });
+
+  // Show date field only for relevant categories
+  updateNoteDateFieldVisibility('general');
+
+  updateNoteStudentDropdown();
+  document.getElementById('noteModal').classList.remove('hidden');
+}
+
+// Edit existing note
+function editNote(noteId) {
+  const note = progressNotes.find(n => n.id === noteId);
+  if (!note) return;
+
+  editingNoteId = noteId;
+  document.getElementById('noteModalTitle').textContent = 'Edit Note';
+  document.getElementById('deleteNoteBtn').classList.remove('hidden');
+
+  updateNoteStudentDropdown();
+
+  // Fill form with note data
+  document.getElementById('noteStudentSelect').value = note.student;
+  document.getElementById('noteContent').value = note.content;
+  document.getElementById('notePinned').checked = note.pinned || false;
+  document.getElementById('noteDate').value = note.noteDate || '';
+
+  // Set category
+  document.querySelectorAll('.note-category-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.category === note.category);
+  });
+
+  updateNoteDateFieldVisibility(note.category);
+
+  document.getElementById('noteModal').classList.remove('hidden');
+}
+
+// Save note (add or update)
+function saveNote() {
+  const student = document.getElementById('noteStudentSelect').value;
+  const content = document.getElementById('noteContent').value.trim();
+  const pinned = document.getElementById('notePinned').checked;
+  const noteDate = document.getElementById('noteDate').value;
+  const category = document.querySelector('.note-category-btn.active')?.dataset.category || 'general';
+
+  if (!student) {
+    showToast('Please select a student');
+    return;
+  }
+
+  if (!content) {
+    showToast('Please enter a note');
+    return;
+  }
+
+  if (editingNoteId) {
+    // Update existing note
+    const noteIndex = progressNotes.findIndex(n => n.id === editingNoteId);
+    if (noteIndex !== -1) {
+      progressNotes[noteIndex] = {
+        ...progressNotes[noteIndex],
+        student,
+        content,
+        category,
+        pinned,
+        noteDate: noteDate || null,
+        updatedAt: new Date().toISOString()
+      };
+      showToast('Note updated!');
+    }
+  } else {
+    // Add new note
+    const newNote = {
+      id: generateNoteId(),
+      student,
+      content,
+      category,
+      pinned,
+      noteDate: noteDate || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    progressNotes.push(newNote);
+    showToast('Note added!');
+  }
+
+  saveProgressNotes();
+  closeNoteModal();
+  renderProgressNotes();
+}
+
+// Delete note
+function deleteNote(noteId) {
+  const note = progressNotes.find(n => n.id === noteId);
+  if (!note) return;
+
+  if (confirm(`Delete this note for ${note.student}?`)) {
+    progressNotes = progressNotes.filter(n => n.id !== noteId);
+    saveProgressNotes();
+    closeNoteModal();
+    renderProgressNotes();
+    showToast('Note deleted');
+  }
+}
+
+// Close note modal
+function closeNoteModal() {
+  document.getElementById('noteModal').classList.add('hidden');
+  editingNoteId = null;
+}
+
+// Update date field visibility based on category
+function updateNoteDateFieldVisibility(category) {
+  const dateGroup = document.getElementById('noteDateGroup');
+  if (dateGroup) {
+    // Show date field for exam and dates categories
+    const showDate = ['exam', 'dates', 'homework'].includes(category);
+    dateGroup.style.display = showDate ? 'block' : 'none';
+  }
+}
+
+// Initialize progress view event listeners
+function initProgressView() {
+  // Add note button
+  document.getElementById('addNoteBtn')?.addEventListener('click', openAddNoteModal);
+
+  // Close modal
+  document.getElementById('closeNoteModal')?.addEventListener('click', closeNoteModal);
+  document.getElementById('noteModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'noteModal') closeNoteModal();
+  });
+
+  // Form submit
+  document.getElementById('noteForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    saveNote();
+  });
+
+  // Delete button
+  document.getElementById('deleteNoteBtn')?.addEventListener('click', () => {
+    if (editingNoteId) deleteNote(editingNoteId);
+  });
+
+  // Category filter buttons
+  document.querySelectorAll('.category-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.category-filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentNoteCategory = btn.dataset.category;
+      renderProgressNotes();
+    });
+  });
+
+  // Category selection in modal
+  document.querySelectorAll('.note-category-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.note-category-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateNoteDateFieldVisibility(btn.dataset.category);
+    });
+  });
+
+  // Student filter
+  document.getElementById('progressStudentSelect')?.addEventListener('change', renderProgressNotes);
+}
+
 // ==================== BACKUP FUNCTIONS ====================
 
 // Check and create automatic backup (weekly)
@@ -3181,6 +3536,7 @@ function createAutoBackup() {
     studentRates: studentRates,
     paymentStatus: paymentStatus,
     advanceCredits: advanceCredits,
+    progressNotes: progressNotes,
     defaultRate: defaultRate
   };
 
@@ -3201,12 +3557,13 @@ function createAutoBackup() {
 function exportData() {
   const exportData = {
     exportDate: new Date().toISOString(),
-    version: '4.0', // v4.0: Added advanceCredits for credit balance tracking
+    version: '5.0', // v5.0: Added progressNotes for student progress tracking
     data: {
       classes: classes,
       studentRates: studentRates,
       paymentStatus: paymentStatus,
       advanceCredits: advanceCredits,
+      progressNotes: progressNotes,
       defaultRate: defaultRate
     }
   };
@@ -3244,6 +3601,7 @@ function importData(file) {
         studentRates = importedData.data.studentRates || {};
         paymentStatus = importedData.data.paymentStatus || {};
         advanceCredits = importedData.data.advanceCredits || {};
+        progressNotes = importedData.data.progressNotes || [];
         defaultRate = importedData.data.defaultRate || 500;
 
         // Save to localStorage
@@ -3251,6 +3609,7 @@ function importData(file) {
         localStorage.setItem('studentRates', JSON.stringify(studentRates));
         localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
         localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
+        localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
         localStorage.setItem('defaultRate', defaultRate);
 
         // Migrate imported classes to include date field if missing
@@ -3459,6 +3818,7 @@ function restoreAutoBackup(index) {
     studentRates = backup.studentRates || {};
     paymentStatus = backup.paymentStatus || {};
     advanceCredits = backup.advanceCredits || {};
+    progressNotes = backup.progressNotes || [];
     defaultRate = backup.defaultRate || 500;
 
     // Save to localStorage
@@ -3466,6 +3826,7 @@ function restoreAutoBackup(index) {
     localStorage.setItem('studentRates', JSON.stringify(studentRates));
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
+    localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
     localStorage.setItem('defaultRate', defaultRate);
 
     // Migrate imported classes to include date field if missing

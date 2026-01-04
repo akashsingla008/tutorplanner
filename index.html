@@ -49,6 +49,7 @@
   <button class="tab active" data-view="schedule">Schedule</button>
   <button class="tab" data-view="students">Students</button>
   <button class="tab" data-view="reports">Reports</button>
+  <button class="tab" data-view="progress">Progress</button>
 </nav>
 
 <!-- Main Schedule View -->
@@ -198,6 +199,86 @@
     <span class="rate-hint">Set individual rates in table above</span>
   </div>
 </main>
+
+<!-- Progress View -->
+<main id="progress-view" class="view">
+  <div class="progress-header">
+    <div class="progress-student-selector">
+      <label for="progressStudentSelect">Student:</label>
+      <select id="progressStudentSelect">
+        <option value="">-- All Students --</option>
+      </select>
+    </div>
+    <button id="addNoteBtn" class="btn btn-primary btn-sm">+ Add Note</button>
+  </div>
+
+  <div class="progress-filters">
+    <button class="category-filter active" data-category="all">All</button>
+    <button class="category-filter" data-category="exam">📝 Exams</button>
+    <button class="category-filter" data-category="syllabus">📚 Syllabus</button>
+    <button class="category-filter" data-category="homework">📋 Homework</button>
+    <button class="category-filter" data-category="dates">📅 Important Dates</button>
+    <button class="category-filter" data-category="progress">📈 Progress</button>
+    <button class="category-filter" data-category="general">💬 General</button>
+  </div>
+
+  <div id="progressNotesList" class="progress-notes-list">
+    <p class="empty-state">No notes yet. Add your first note to track student progress!</p>
+  </div>
+</main>
+
+<!-- Add Note Modal -->
+<div id="noteModal" class="modal hidden">
+  <div class="modal-content note-modal-content">
+    <div class="modal-header">
+      <h2 id="noteModalTitle">Add Note</h2>
+      <button id="closeNoteModal" class="close-btn">&times;</button>
+    </div>
+
+    <form id="noteForm">
+      <div class="form-group">
+        <label for="noteStudentSelect">Student</label>
+        <select id="noteStudentSelect" required>
+          <option value="">-- Select Student --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Category</label>
+        <div class="note-category-buttons">
+          <button type="button" class="note-category-btn" data-category="exam">📝 Exam</button>
+          <button type="button" class="note-category-btn" data-category="syllabus">📚 Syllabus</button>
+          <button type="button" class="note-category-btn" data-category="homework">📋 Homework</button>
+          <button type="button" class="note-category-btn" data-category="dates">📅 Important Date</button>
+          <button type="button" class="note-category-btn" data-category="progress">📈 Progress</button>
+          <button type="button" class="note-category-btn active" data-category="general">💬 General</button>
+        </div>
+      </div>
+
+      <div class="form-group" id="noteDateGroup">
+        <label for="noteDate">Date (for exams/important dates)</label>
+        <input type="date" id="noteDate" />
+      </div>
+
+      <div class="form-group">
+        <label for="noteContent">Note</label>
+        <textarea id="noteContent" rows="4" placeholder="Enter your note here..." required></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="notePinned" />
+          <span>📌 Pin this note (show at top)</span>
+        </label>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" id="deleteNoteBtn" class="btn btn-danger hidden">Delete</button>
+        <button type="submit" id="saveNoteBtn" class="btn btn-primary">Save Note</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- Add Class Button -->
 <button id="addBtn" class="fab" title="Add Class">+</button>
