@@ -53,6 +53,7 @@ let customEndDate = null;
 let defaultRate = parseInt(localStorage.getItem('defaultRate')) || 500;
 let studentRates = safeJsonParse('studentRates', {});
 let paymentStatus = safeJsonParse('paymentStatus', {});
+let advanceCredits = safeJsonParse('advanceCredits', {}); // Track advance payment credits per student
 let isSelectMode = false;
 let selectedClasses = new Set();
 let allowClashOverride = false; // Flag to allow saving despite clash
@@ -156,12 +157,14 @@ function checkAndRecoverData() {
     classes = backup.classes;
     studentRates = backup.studentRates || studentRates;
     paymentStatus = backup.paymentStatus || paymentStatus;
+    advanceCredits = backup.advanceCredits || advanceCredits;
     defaultRate = backup.defaultRate || defaultRate;
 
     // Save recovered data
     saveClasses();
     localStorage.setItem('studentRates', JSON.stringify(studentRates));
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     localStorage.setItem('defaultRate', defaultRate);
 
     showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
@@ -175,12 +178,14 @@ function checkAndRecoverData() {
     classes = backup.allClasses;
     studentRates = backup.studentRates || studentRates;
     paymentStatus = backup.paymentStatus || paymentStatus;
+    advanceCredits = backup.advanceCredits || advanceCredits;
     defaultRate = backup.defaultRate || defaultRate;
 
     // Save recovered data
     saveClasses();
     localStorage.setItem('studentRates', JSON.stringify(studentRates));
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     localStorage.setItem('defaultRate', defaultRate);
 
     showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
@@ -316,6 +321,7 @@ function cleanupOldClasses() {
     allClasses: classes,
     studentRates: studentRates,
     paymentStatus: paymentStatus,
+    advanceCredits: advanceCredits,
     defaultRate: defaultRate
   };
 
@@ -2308,10 +2314,12 @@ function renderReport() {
       const amount = Math.round((stats.completedMinutes / 60) * rate);
       const paidAmountForStudent = Math.round((stats.paidMinutes / 60) * rate);
       const unpaidAmount = amount - paidAmountForStudent;
-      // Calculate advance payment amount for upcoming classes
-      const advancePaidAmount = Math.round((stats.advancePaidMinutes / 60) * rate);
       totalAmount += amount;
       paidAmount += paidAmountForStudent;
+
+      // Get advance credit balance for this student
+      const creditBalance = advanceCredits[student] || 0;
+      const freeClassesRemaining = rate > 0 ? Math.floor(creditBalance / rate) : 0;
 
       // All classes paid?
       const allPaid = completedClasses > 0 && paidClasses === completedClasses;
@@ -2321,16 +2329,12 @@ function renderReport() {
       const hasUpcomingClasses = upcomingClasses > 0;
       const hasPendingClasses = stats.pending > 0;
       const hasAdvancePayment = advancePaidClasses > 0;
+      const hasCredit = creditBalance > 0;
 
-      // Row color logic:
-      // - Green: all completed classes are paid
-      // - Light green: has completed but not all paid
-      // - Amber: only upcoming or pending classes (no completed)
-      // - Mixed (light yellow): has both completed and upcoming/pending
-      // - Blue tint: has advance payment for upcoming
+      // Row color logic
       let rowClass = '';
       if (!hasCompletedClasses && (hasUpcomingClasses || hasPendingClasses)) {
-        rowClass = hasAdvancePayment ? 'report-row-advance' : 'report-row-pending';
+        rowClass = (hasAdvancePayment || hasCredit) ? 'report-row-advance' : 'report-row-pending';
       } else if (hasCompletedClasses && (hasUpcomingClasses || hasPendingClasses)) {
         rowClass = 'report-row-mixed';
       } else if (hasCompletedClasses) {
@@ -2347,6 +2351,10 @@ function renderReport() {
         }
       }
       if (hasPendingClasses) badges.push(`${stats.pending} awaiting`);
+      // Add credit balance badge
+      if (hasCredit) {
+        badges.push(`💰 ${freeClassesRemaining} free class${freeClassesRemaining !== 1 ? 'es' : ''}`);
+      }
 
       // Payment status display for completed classes
       let paymentDisplay = '';
@@ -2370,25 +2378,25 @@ function renderReport() {
         }
       }
 
-      // Advance payment display for upcoming classes
+      // Advance payment/credit display
       let advanceDisplay = '';
-      if (hasUpcomingClasses && !hasPendingClasses) {
-        if (advancePaidClasses === upcomingClasses) {
-          advanceDisplay = `<span class="payment-status advance-paid">💰 Prepaid (${advancePaidClasses})</span>`;
-        } else if (advancePaidClasses > 0) {
-          advanceDisplay = `
-            <span class="payment-status advance-partial">${advancePaidClasses}/${upcomingClasses} Prepaid</span>
-            <button class="advance-pay-btn" data-student="${escapeHtml(student)}" data-class-ids="${stats.upcomingClassIds.join(',')}" title="Record advance payment">
-              + Advance
+      // Show credit balance info
+      if (hasCredit) {
+        advanceDisplay = `
+          <div class="credit-balance-display">
+            <span class="credit-balance">₹${creditBalance.toLocaleString()} credit</span>
+            <span class="free-classes">(${freeClassesRemaining} class${freeClassesRemaining !== 1 ? 'es' : ''} free)</span>
+            <button class="add-credit-btn" data-student="${escapeHtml(student)}" title="Add/Edit advance credit">
+              Edit
             </button>
-          `;
-        } else {
-          advanceDisplay = `
-            <button class="advance-pay-btn" data-student="${escapeHtml(student)}" data-class-ids="${stats.upcomingClassIds.join(',')}" title="Record advance payment">
-              💰 Advance Pay
-            </button>
-          `;
-        }
+          </div>
+        `;
+      } else if (hasUpcomingClasses || !hasCompletedClasses) {
+        advanceDisplay = `
+          <button class="add-credit-btn" data-student="${escapeHtml(student)}" title="Record advance payment">
+            💰 Add Advance
+          </button>
+        `;
       }
 
       return `
@@ -2408,7 +2416,7 @@ function renderReport() {
           </td>
           <td class="amount">
             ${hasCompletedClasses ? `₹${amount.toLocaleString()}${unpaidAmount > 0 ? ` <span class="unpaid-amount">(₹${unpaidAmount.toLocaleString()} unpaid)</span>` : ''}` : '-'}
-            ${hasUpcomingClasses && advancePaidAmount > 0 ? `<br><span class="advance-amount">+₹${advancePaidAmount.toLocaleString()} prepaid</span>` : ''}
+            ${hasCredit ? `<br><span class="advance-amount">Credit: ₹${creditBalance.toLocaleString()}</span>` : ''}
           </td>
           <td class="payment-cell">
             ${hasCompletedClasses ? `
@@ -2419,11 +2427,7 @@ function renderReport() {
                 </button>
               ` : ''}
             ` : ''}
-            ${hasUpcomingClasses && !hasCompletedClasses ? advanceDisplay : ''}
-            ${hasUpcomingClasses && hasCompletedClasses ? `<div class="advance-section">${advanceDisplay}</div>` : ''}
-            ${!hasCompletedClasses && !hasUpcomingClasses && hasPendingClasses ? `
-              <span class="awaiting-confirm-label">Awaiting confirmation</span>
-            ` : ''}
+            <div class="advance-section">${advanceDisplay}</div>
           </td>
         </tr>
       `;
@@ -2484,6 +2488,14 @@ function renderReport() {
         const student = e.target.dataset.student;
         const classIds = e.target.dataset.classIds.split(',');
         showAdvancePaymentDialog(student, classIds);
+      });
+    });
+
+    // Add event listeners to add/edit credit buttons
+    tbody.querySelectorAll('.add-credit-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const student = e.target.dataset.student;
+        showAddCreditDialog(student);
       });
     });
   }
@@ -2938,6 +2950,155 @@ function closeAdvancePaymentDialog() {
   if (dialog) dialog.remove();
 }
 
+// Show dialog to add/edit advance credit for a student
+function showAddCreditDialog(student) {
+  const currentCredit = advanceCredits[student] || 0;
+  const rate = studentRates[student] || defaultRate;
+  const freeClasses = rate > 0 ? Math.floor(currentCredit / rate) : 0;
+
+  const dialogHtml = `
+    <div class="mark-paid-dialog-content credit-dialog">
+      <h3>💰 Advance Payment - ${escapeHtml(student)}</h3>
+      <p class="dialog-subtitle">Record advance payment received from parent</p>
+
+      <div class="credit-info-section">
+        <div class="credit-current">
+          <span class="credit-label">Current Balance:</span>
+          <span class="credit-value">₹${currentCredit.toLocaleString()}</span>
+          <span class="credit-classes">(${freeClasses} class${freeClasses !== 1 ? 'es' : ''} @ ₹${rate}/hr)</span>
+        </div>
+      </div>
+
+      <div class="credit-input-section">
+        <label class="credit-input-label">Add Payment Amount (₹):</label>
+        <input type="number" id="creditAmountInput" class="credit-amount-input"
+               placeholder="e.g., 10000" min="0" step="100" value="" />
+        <div class="credit-preview" id="creditPreview"></div>
+      </div>
+
+      <div class="credit-quick-amounts">
+        <span class="quick-label">Quick add:</span>
+        <button class="quick-amount-btn" data-amount="${rate * 4}">4 classes (₹${(rate * 4).toLocaleString()})</button>
+        <button class="quick-amount-btn" data-amount="${rate * 8}">8 classes (₹${(rate * 8).toLocaleString()})</button>
+        <button class="quick-amount-btn" data-amount="${rate * 12}">12 classes (₹${(rate * 12).toLocaleString()})</button>
+      </div>
+
+      <div class="credit-actions">
+        <label class="credit-set-option">
+          <input type="radio" name="creditAction" value="add" checked /> Add to existing balance
+        </label>
+        <label class="credit-set-option">
+          <input type="radio" name="creditAction" value="set" /> Set as new balance (replace)
+        </label>
+        ${currentCredit > 0 ? `
+        <label class="credit-set-option credit-clear">
+          <input type="radio" name="creditAction" value="clear" /> Clear balance (set to ₹0)
+        </label>
+        ` : ''}
+      </div>
+
+      <div class="dialog-actions">
+        <button class="btn btn-primary" id="saveCreditBtn">Save</button>
+        <button class="btn btn-secondary" id="cancelCreditBtn">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  // Create dialog overlay
+  const dialog = document.createElement('div');
+  dialog.id = 'addCreditDialog';
+  dialog.className = 'modal';
+  dialog.innerHTML = `<div class="modal-content">${dialogHtml}</div>`;
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) closeAddCreditDialog();
+  });
+  document.body.appendChild(dialog);
+
+  const amountInput = document.getElementById('creditAmountInput');
+  const preview = document.getElementById('creditPreview');
+
+  // Update preview when amount changes
+  const updatePreview = () => {
+    const inputAmount = parseInt(amountInput.value) || 0;
+    const action = dialog.querySelector('input[name="creditAction"]:checked').value;
+
+    let newBalance = currentCredit;
+    if (action === 'add') {
+      newBalance = currentCredit + inputAmount;
+    } else if (action === 'set') {
+      newBalance = inputAmount;
+    } else if (action === 'clear') {
+      newBalance = 0;
+    }
+
+    const newFreeClasses = rate > 0 ? Math.floor(newBalance / rate) : 0;
+
+    if (inputAmount > 0 || action === 'clear') {
+      preview.innerHTML = `
+        <div class="preview-result">
+          New balance: <strong>₹${newBalance.toLocaleString()}</strong>
+          (${newFreeClasses} free class${newFreeClasses !== 1 ? 'es' : ''})
+        </div>
+      `;
+    } else {
+      preview.innerHTML = '';
+    }
+  };
+
+  amountInput.addEventListener('input', updatePreview);
+  dialog.querySelectorAll('input[name="creditAction"]').forEach(radio => {
+    radio.addEventListener('change', updatePreview);
+  });
+
+  // Quick amount buttons
+  dialog.querySelectorAll('.quick-amount-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      amountInput.value = btn.dataset.amount;
+      updatePreview();
+    });
+  });
+
+  // Save button
+  document.getElementById('saveCreditBtn').addEventListener('click', () => {
+    const inputAmount = parseInt(amountInput.value) || 0;
+    const action = dialog.querySelector('input[name="creditAction"]:checked').value;
+
+    let newBalance = currentCredit;
+    if (action === 'add') {
+      newBalance = currentCredit + inputAmount;
+    } else if (action === 'set') {
+      newBalance = inputAmount;
+    } else if (action === 'clear') {
+      newBalance = 0;
+    }
+
+    if (newBalance > 0) {
+      advanceCredits[student] = newBalance;
+    } else {
+      delete advanceCredits[student];
+    }
+
+    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
+    closeAddCreditDialog();
+
+    const newFreeClasses = rate > 0 ? Math.floor(newBalance / rate) : 0;
+    if (newBalance > 0) {
+      showToast(`✅ ${student}'s credit: ₹${newBalance.toLocaleString()} (${newFreeClasses} free classes)`);
+    } else {
+      showToast(`Credit cleared for ${student}`);
+    }
+
+    renderReport();
+  });
+
+  document.getElementById('cancelCreditBtn').addEventListener('click', closeAddCreditDialog);
+}
+
+function closeAddCreditDialog() {
+  const dialog = document.getElementById('addCreditDialog');
+  if (dialog) dialog.remove();
+}
+
 // Send payment reminder
 function sendPaymentReminder(student, amount, period, classCount, hours, days) {
   // Format days nicely
@@ -3019,6 +3180,7 @@ function createAutoBackup() {
     classes: classes,
     studentRates: studentRates,
     paymentStatus: paymentStatus,
+    advanceCredits: advanceCredits,
     defaultRate: defaultRate
   };
 
@@ -3039,11 +3201,12 @@ function createAutoBackup() {
 function exportData() {
   const exportData = {
     exportDate: new Date().toISOString(),
-    version: '3.0', // v3.0: Added date field to classes for proper week/month tracking
+    version: '4.0', // v4.0: Added advanceCredits for credit balance tracking
     data: {
       classes: classes,
       studentRates: studentRates,
       paymentStatus: paymentStatus,
+      advanceCredits: advanceCredits,
       defaultRate: defaultRate
     }
   };
@@ -3080,12 +3243,14 @@ function importData(file) {
         classes = importedData.data.classes || [];
         studentRates = importedData.data.studentRates || {};
         paymentStatus = importedData.data.paymentStatus || {};
+        advanceCredits = importedData.data.advanceCredits || {};
         defaultRate = importedData.data.defaultRate || 500;
 
         // Save to localStorage
         saveClasses();
         localStorage.setItem('studentRates', JSON.stringify(studentRates));
         localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+        localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
         localStorage.setItem('defaultRate', defaultRate);
 
         // Migrate imported classes to include date field if missing
@@ -3293,12 +3458,14 @@ function restoreAutoBackup(index) {
     classes = backup.classes || [];
     studentRates = backup.studentRates || {};
     paymentStatus = backup.paymentStatus || {};
+    advanceCredits = backup.advanceCredits || {};
     defaultRate = backup.defaultRate || 500;
 
     // Save to localStorage
     saveClasses();
     localStorage.setItem('studentRates', JSON.stringify(studentRates));
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     localStorage.setItem('defaultRate', defaultRate);
 
     // Migrate imported classes to include date field if missing
