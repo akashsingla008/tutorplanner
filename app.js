@@ -3055,12 +3055,6 @@ async function showBackupDialog() {
       </div>
 
       <div class="backup-section">
-        <h4>🔄 Force App Refresh</h4>
-        <p>Clear cache and reload to get latest version</p>
-        <button class="btn btn-secondary" id="forceRefreshBtn">Clear Cache & Reload</button>
-      </div>
-
-      <div class="backup-section">
         <h4>🔄 Auto Backups (Last 2 weeks)</h4>
         <div class="backup-list" id="backupList">
           ${backupListHtml}
@@ -3095,22 +3089,6 @@ async function showBackupDialog() {
       showToast(`Fixed ${fixedCount} classes with date issues!`);
     } else {
       showToast('No date issues found - all dates are correct!');
-    }
-  });
-  document.getElementById('forceRefreshBtn').addEventListener('click', async () => {
-    if (confirm('This will clear the app cache and reload. Your data will be preserved. Continue?')) {
-      // Clear all caches
-      if ('caches' in window) {
-        const cacheNames = await caches.keys();
-        await Promise.all(cacheNames.map(name => caches.delete(name)));
-      }
-      // Unregister service worker
-      if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.map(reg => reg.unregister()));
-      }
-      // Reload the page
-      window.location.reload(true);
     }
   });
   document.getElementById('closeBackupBtn').addEventListener('click', closeBackupDialog);
