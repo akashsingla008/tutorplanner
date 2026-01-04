@@ -2206,32 +2206,7 @@ function renderReport() {
   // Get classes in range (for now, all classes since we don't have date-specific data)
   const classesInRange = getClassesInRange(startDate, endDate);
 
-  // Helper to check if a class is completed (day/time has passed)
-  const today = new Date();
-  const todayDayIndex = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
-  const dayIndexMap = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
-
-  function isClassCompleted(cls) {
-    // If class has a completion date stored, use that
-    if (cls.completedDate) return true;
-
-    // Otherwise check if the day has passed this week
-    const classDayIndex = dayIndexMap[cls.day];
-
-    // If class day is before today in the week, it's completed
-    // If class day is today, check if the class end time has passed
-    if (classDayIndex < todayDayIndex) {
-      return true;
-    } else if (classDayIndex === todayDayIndex) {
-      // Check if class end time has passed
-      const now = new Date();
-      const [endHour, endMin] = cls.end.split(':').map(Number);
-      const classEndTime = new Date(now);
-      classEndTime.setHours(endHour, endMin, 0, 0);
-      return now > classEndTime;
-    }
-    return false;
-  }
+  // Use global isClassCompleted function which properly checks cls.date
 
   // Calculate totals with proper completed/upcoming distinction
   let totalClasses = classesInRange.length;
