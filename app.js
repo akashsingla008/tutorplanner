@@ -122,6 +122,7 @@ function init() {
   migrateClassesToDateFormat();
   fixTimezoneShiftedDates(); // Fix dates that were shifted due to UTC timezone bug
   cleanupOldClasses();
+  applyAdvanceCreditsToCompletedClasses(); // Auto-apply credits to completed classes
   renderWeekGrid();
   setupEventListeners();
   updateStudentDropdowns();
@@ -344,6 +345,49 @@ function cleanupOldClasses() {
   // Remove old classes
   classes = classes.filter(cls => !cls.date || cls.date >= cutoffDate);
   saveClasses();
+}
+
+// Auto-apply advance credits to completed unpaid classes (globally)
+// This ensures consistent credit application regardless of which week is being viewed
+function applyAdvanceCreditsToCompletedClasses() {
+  // Get all completed unpaid classes, sorted by date (oldest first)
+  const completedUnpaidClasses = classes
+    .filter(c => !c.cancelled && !c.pendingConfirmation && isClassCompleted(c))
+    .filter(c => {
+      const classId = getClassPaymentId(c);
+      return !paymentStatus[classId]; // Not yet paid
+    })
+    .sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.start.localeCompare(b.start);
+    });
+
+  let creditsApplied = 0;
+  let dataChanged = false;
+
+  completedUnpaidClasses.forEach(c => {
+    const classId = getClassPaymentId(c);
+    const rate = studentRates[c.student] || defaultRate;
+    const minutes = getMinutesBetween(c.start, c.end);
+    const classCost = Math.round((minutes / 60) * rate);
+    const currentCredit = advanceCredits[c.student] || 0;
+
+    if (currentCredit >= classCost && classCost > 0) {
+      // Auto-pay this class from credit
+      paymentStatus[classId] = 'credit';
+      advanceCredits[c.student] = currentCredit - classCost;
+      creditsApplied++;
+      dataChanged = true;
+    }
+  });
+
+  // Save only if changes were made
+  if (dataChanged) {
+    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
+  }
+
+  return creditsApplied;
 }
 
 // Event Listeners Setup
@@ -2293,27 +2337,12 @@ function renderReport() {
         studentStats[c.student].completedMinutes += minutes;
         studentStats[c.student].completedClassIds.push(classId);
         // Check if this class is paid (either manually or auto-applied from credit)
-        if (paymentStatus[classId]) {
+        const isPaid = paymentStatus[classId];
+        if (isPaid) {
           studentStats[c.student].paidClasses++;
           studentStats[c.student].paidMinutes += minutes;
-        } else {
-          // Auto-apply advance credit if available
-          const rate = studentRates[c.student] || defaultRate;
-          const classCost = Math.round((minutes / 60) * rate);
-          const currentCredit = advanceCredits[c.student] || 0;
-
-          if (currentCredit >= classCost && classCost > 0) {
-            // Auto-pay this class from credit (store 'credit' as source)
-            paymentStatus[classId] = 'credit';
-            advanceCredits[c.student] = currentCredit - classCost;
-
-            // Save the updated status
-            localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
-            localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
-
-            // Count as paid
-            studentStats[c.student].paidClasses++;
-            studentStats[c.student].paidMinutes += minutes;
+          // Track if paid from credit
+          if (isPaid === 'credit') {
             if (!studentStats[c.student].creditPaidClasses) {
               studentStats[c.student].creditPaidClasses = 0;
             }
@@ -2784,7 +2813,9 @@ function showMarkPaidDialog(student, classIds) {
     const date = parts[1];
     const start = parts[2];
     const end = parts[3];
-    const isPaid = paymentStatus[classId] || false;
+    const payStatus = paymentStatus[classId];
+    const isPaid = !!payStatus; // truthy check
+    const paidFromCredit = payStatus === 'credit';
     const rate = studentRates[student] || defaultRate;
     const minutes = getMinutesBetween(start, end);
     const amount = Math.round((minutes / 60) * rate);
@@ -2793,7 +2824,7 @@ function showMarkPaidDialog(student, classIds) {
     const dateObj = new Date(date + 'T00:00:00');
     const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 
-    return { classId, date, dateStr, start, end, isPaid, amount };
+    return { classId, date, dateStr, start, end, isPaid, paidFromCredit, amount };
   });
 
   // Sort by date
@@ -2805,11 +2836,12 @@ function showMarkPaidDialog(student, classIds) {
       <p class="dialog-subtitle">Select the classes that have been paid for:</p>
       <div class="class-payment-list">
         ${classDetails.map(cls => `
-          <label class="class-payment-item ${cls.isPaid ? 'paid' : ''}">
+          <label class="class-payment-item ${cls.isPaid ? 'paid' : ''} ${cls.paidFromCredit ? 'credit-paid' : ''}">
             <input type="checkbox" class="class-paid-checkbox" data-class-id="${cls.classId}" ${cls.isPaid ? 'checked' : ''} />
             <span class="class-info">
               <span class="class-date">${cls.dateStr}</span>
               <span class="class-time">${formatTime(cls.start)} - ${formatTime(cls.end)}</span>
+              ${cls.paidFromCredit ? '<span class="credit-badge">from credit</span>' : ''}
             </span>
             <span class="class-amount">₹${cls.amount.toLocaleString()}</span>
           </label>
@@ -3134,9 +3166,18 @@ function showAddCreditDialog(student) {
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     closeAddCreditDialog();
 
-    const newFreeClasses = rate > 0 ? Math.floor(newBalance / rate) : 0;
+    // Auto-apply credit to any completed unpaid classes
+    const appliedCount = applyAdvanceCreditsToCompletedClasses();
+
+    const newFreeClasses = rate > 0 ? Math.floor((advanceCredits[student] || 0) / rate) : 0;
     if (newBalance > 0) {
-      showToast(`✅ ${student}'s credit: ₹${newBalance.toLocaleString()} (${newFreeClasses} free classes)`);
+      let message = `✅ ${student}'s credit: ₹${(advanceCredits[student] || 0).toLocaleString()}`;
+      if (appliedCount > 0) {
+        message += ` (${appliedCount} class${appliedCount !== 1 ? 'es' : ''} auto-paid, ${newFreeClasses} remaining)`;
+      } else {
+        message += ` (${newFreeClasses} free class${newFreeClasses !== 1 ? 'es' : ''})`;
+      }
+      showToast(message);
     } else {
       showToast(`Credit cleared for ${student}`);
     }
@@ -3868,6 +3909,9 @@ function importData(file) {
         // Always fix timezone-shifted dates on import (backup may have old bad dates)
         forceFixTimezoneShiftedDates();
 
+        // Auto-apply any pending advance credits to completed classes
+        applyAdvanceCreditsToCompletedClasses();
+
         // Refresh UI
         renderWeekGrid();
         updateStudentDropdowns();
@@ -4084,6 +4128,9 @@ function restoreAutoBackup(index) {
 
     // Fix timezone-shifted dates (backup may have old bad dates)
     forceFixTimezoneShiftedDates();
+
+    // Auto-apply any pending advance credits to completed classes
+    applyAdvanceCreditsToCompletedClasses();
 
     // Refresh UI
     renderWeekGrid();
