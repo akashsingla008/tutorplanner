@@ -386,7 +386,9 @@ function applyAdvanceCreditsToCompletedClasses() {
   completedUnpaidClasses.forEach(c => {
     const classId = getClassPaymentId(c);
     const rate = studentRates[c.student] || defaultRate;
-    const minutes = getMinutesBetween(c.start, c.end);
+    // Use actual minutes for partial classes, scheduled minutes otherwise
+    const scheduledMinutes = getMinutesBetween(c.start, c.end);
+    const minutes = c.partialClass ? (c.actualMinutes || 0) : scheduledMinutes;
     const classCost = Math.round((minutes / 60) * rate);
     const currentCredit = advanceCredits[c.student] || 0;
 
@@ -420,7 +422,9 @@ function calculateCreditUsedPerStudent() {
     const classId = getClassPaymentId(c);
     if (paymentStatus[classId] === 'credit') {
       const rate = studentRates[c.student] || defaultRate;
-      const minutes = getMinutesBetween(c.start, c.end);
+      // Use actual minutes for partial classes, scheduled minutes otherwise
+      const scheduledMinutes = getMinutesBetween(c.start, c.end);
+      const minutes = c.partialClass ? (c.actualMinutes || 0) : scheduledMinutes;
       const classCost = Math.round((minutes / 60) * rate);
 
       if (!creditUsed[c.student]) {
@@ -3069,7 +3073,9 @@ function renderEarningsChart(classesInRange, _studentStats, isClassCompleted) {
     }
 
     const rate = studentRates[cls.student] || defaultRate;
-    const minutes = getMinutesBetween(cls.start, cls.end);
+    // Use actual minutes for partial classes, scheduled minutes otherwise
+    const scheduledMinutes = getMinutesBetween(cls.start, cls.end);
+    const minutes = cls.partialClass ? (cls.actualMinutes || 0) : scheduledMinutes;
     const amount = Math.round((minutes / 60) * rate);
 
     if (cls.pendingConfirmation) {
@@ -3194,7 +3200,9 @@ function showChartDayDetails(day, paid, completed, upcoming, classesInRange, isC
 
   dayClasses.sort((a, b) => a.start.localeCompare(b.start)).forEach(cls => {
     const rate = studentRates[cls.student] || defaultRate;
-    const minutes = getMinutesBetween(cls.start, cls.end);
+    // Use actual minutes for partial classes, scheduled minutes otherwise
+    const scheduledMinutes = getMinutesBetween(cls.start, cls.end);
+    const minutes = cls.partialClass ? (cls.actualMinutes || 0) : scheduledMinutes;
     const amount = Math.round((minutes / 60) * rate);
 
     let status = 'upcoming';
@@ -3259,14 +3267,18 @@ function showMarkPaidDialog(student, classIds) {
     const isPaid = !!payStatus; // truthy check
     const paidFromCredit = payStatus === 'credit';
     const rate = studentRates[student] || defaultRate;
-    const minutes = getMinutesBetween(start, end);
+
+    // Find the actual class object to check for partial status
+    const actualClass = classes.find(c => getClassPaymentId(c) === classId);
+    const scheduledMinutes = getMinutesBetween(start, end);
+    const minutes = actualClass?.partialClass ? (actualClass.actualMinutes || 0) : scheduledMinutes;
     const amount = Math.round((minutes / 60) * rate);
 
     // Format date nicely
     const dateObj = new Date(date + 'T00:00:00');
     const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 
-    return { classId, date, dateStr, start, end, isPaid, paidFromCredit, amount };
+    return { classId, date, dateStr, start, end, isPaid, paidFromCredit, amount, isPartial: actualClass?.partialClass };
   });
 
   // Sort by date
@@ -3364,7 +3376,11 @@ function showAdvancePaymentDialog(student, classIds) {
     const end = parts[3];
     const isPaid = paymentStatus[classId] || false;
     const rate = studentRates[student] || defaultRate;
-    const minutes = getMinutesBetween(start, end);
+
+    // Find the actual class object to check for partial status
+    const actualClass = classes.find(c => getClassPaymentId(c) === classId);
+    const scheduledMinutes = getMinutesBetween(start, end);
+    const minutes = actualClass?.partialClass ? (actualClass.actualMinutes || 0) : scheduledMinutes;
     const amount = Math.round((minutes / 60) * rate);
 
     // Format date nicely
