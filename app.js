@@ -2327,7 +2327,10 @@ function renderReport() {
     if (!c.cancelled && !c.pendingConfirmation) {
       if (isClassCompleted(c)) {
         completedCount++;
-        completedMinutes += getMinutesBetween(c.start, c.end);
+        // Use actual minutes for partial classes, scheduled minutes otherwise
+        const scheduledMins = getMinutesBetween(c.start, c.end);
+        const actualMins = c.partialClass ? (c.actualMinutes || 0) : scheduledMins;
+        completedMinutes += actualMins;
       } else {
         upcomingCount++;
       }
