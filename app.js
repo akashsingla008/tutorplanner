@@ -2641,8 +2641,8 @@ function renderReport() {
               ${badges.length > 0 ? `<span class="student-pending-badge">${badges.join(', ')}</span>` : ''}
               ${pendingTimeBadge}
             </div>
-            <button class="expand-classes-btn" data-student="${escapeHtml(student)}" title="View/Edit individual classes">
-              📋 Classes
+            <button class="expand-classes-btn" data-student="${escapeHtml(student)}" title="Mark partial or cancel classes">
+              ✏️ Partial/Cancel
             </button>
           </td>
           <td>${completedClasses}${(hasUpcomingClasses || hasPendingClasses) ? ` <span class="pending-count">(+${upcomingClasses + stats.pending})</span>` : ''}</td>
@@ -2755,7 +2755,7 @@ function renderReport() {
         const detailsRow = tbody.querySelector(`tr[data-student-details="${student}"]`);
         if (detailsRow) {
           detailsRow.classList.toggle('hidden');
-          e.target.textContent = detailsRow.classList.contains('hidden') ? '📋 Classes' : '📋 Hide';
+          e.target.textContent = detailsRow.classList.contains('hidden') ? '✏️ Partial/Cancel' : '✏️ Hide';
         }
       });
     });
