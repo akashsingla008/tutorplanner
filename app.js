@@ -86,8 +86,6 @@ const clashWarning = document.getElementById("clashWarning");
 const formClashWarning = document.getElementById("formClashWarning");
 const suggestedSlots = document.getElementById("suggestedSlots");
 const slotsList = document.getElementById("slotsList");
-const studentSelect = document.getElementById("studentSelect");
-const studentSchedule = document.getElementById("studentSchedule");
 const dragHint = document.getElementById("dragHint");
 const copyToDaySection = document.getElementById("copyToDaySection");
 const cancelSection = document.getElementById("cancelSection");
@@ -565,9 +563,6 @@ function setupEventListeners() {
     updateCopyToDayClashState();
   });
 
-  // Student view dropdown
-  studentSelect.addEventListener("change", renderStudentSchedule);
-
   // Report period buttons
   document.querySelectorAll(".period-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -712,9 +707,7 @@ function switchView(viewName) {
   document.querySelector(`[data-view="${viewName}"]`).classList.add("active");
   document.getElementById(`${viewName}-view`).classList.add("active");
 
-  if (viewName === "students") {
-    updateStudentDropdowns();
-  } else if (viewName === "reports") {
+  if (viewName === "reports") {
     renderReport();
   } else if (viewName === "progress") {
     updateProgressStudentDropdown();
@@ -2049,18 +2042,9 @@ function findAvailableSlots(day) {
   return slots.slice(0, 4); // Return max 4 suggestions
 }
 
-// Student Dropdown Functions
+// Update existing student dropdown in Add/Edit class form
 function updateStudentDropdowns() {
   const students = [...new Set(classes.map(c => c.student))].sort();
-
-  // Update main student view dropdown
-  studentSelect.innerHTML = '<option value="">-- Choose Student --</option>';
-  students.forEach(student => {
-    const option = document.createElement("option");
-    option.value = student;
-    option.textContent = student;
-    studentSelect.appendChild(option);
-  });
 
   // Update form's existing student dropdown
   existingStudentSelect.innerHTML = '<option value="">-- Select Existing --</option>';
@@ -2070,56 +2054,6 @@ function updateStudentDropdowns() {
     option.textContent = student;
     existingStudentSelect.appendChild(option);
   });
-}
-
-function renderStudentSchedule() {
-  const selectedStudent = studentSelect.value;
-
-  if (!selectedStudent) {
-    studentSchedule.innerHTML = '<p class="empty-state">Select a student to view their weekly schedule</p>';
-    return;
-  }
-
-  const studentClasses = classes
-    .filter(c => c.student === selectedStudent)
-    .sort((a, b) => {
-      const dayDiff = DAYS.indexOf(a.day) - DAYS.indexOf(b.day);
-      if (dayDiff !== 0) return dayDiff;
-      return a.start.localeCompare(b.start);
-    });
-
-  if (studentClasses.length === 0) {
-    studentSchedule.innerHTML = '<p class="empty-state">No classes scheduled for this student</p>';
-    return;
-  }
-
-  // Group by day
-  const groupedByDay = {};
-  DAYS.forEach(day => {
-    const dayClasses = studentClasses.filter(c => c.day === day);
-    if (dayClasses.length > 0) {
-      groupedByDay[day] = dayClasses;
-    }
-  });
-
-  let html = '';
-  for (const day of DAYS) {
-    if (groupedByDay[day]) {
-      html += `
-        <div class="student-day">
-          <div class="student-day-header">${day}</div>
-          ${groupedByDay[day].map(c => `
-            <div class="student-class">
-              <span class="student-class-time">${formatTime(c.start)} - ${formatTime(c.end)}</span>
-              <span class="student-class-duration">${getDuration(c.start, c.end)}</span>
-            </div>
-          `).join("")}
-        </div>
-      `;
-    }
-  }
-
-  studentSchedule.innerHTML = html;
 }
 
 // Utility Functions
