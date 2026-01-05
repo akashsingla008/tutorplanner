@@ -3307,10 +3307,25 @@ header .subtitle {
   border: 1px solid #c4b5fd;
 }
 
+.credit-used {
+  font-size: 12px;
+  color: #059669;
+  background: #d1fae5;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
 .credit-balance {
   font-weight: 600;
   color: #7c3aed;
   font-size: 13px;
+}
+
+.credit-exhausted {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
 }
 
 .free-classes {

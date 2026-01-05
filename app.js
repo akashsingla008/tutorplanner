@@ -399,6 +399,30 @@ function applyAdvanceCreditsToCompletedClasses() {
   return creditsApplied;
 }
 
+// Calculate total credit used per student from all credit-paid classes
+function calculateCreditUsedPerStudent() {
+  const creditUsed = {};
+
+  // Go through all classes and sum up amounts paid from credit
+  classes.forEach(c => {
+    if (c.cancelled || c.pendingConfirmation) return;
+
+    const classId = getClassPaymentId(c);
+    if (paymentStatus[classId] === 'credit') {
+      const rate = studentRates[c.student] || defaultRate;
+      const minutes = getMinutesBetween(c.start, c.end);
+      const classCost = Math.round((minutes / 60) * rate);
+
+      if (!creditUsed[c.student]) {
+        creditUsed[c.student] = 0;
+      }
+      creditUsed[c.student] += classCost;
+    }
+  });
+
+  return creditUsed;
+}
+
 // Event Listeners Setup
 function setupEventListeners() {
   // Navigation tabs
@@ -2375,6 +2399,9 @@ function renderReport() {
   const tbody = document.getElementById("studentReportBody");
   const students = Object.keys(studentStats).sort();
 
+  // Calculate credit used per student (across all classes, not just current range)
+  const creditUsedPerStudent = calculateCreditUsedPerStudent();
+
   let totalAmount = 0;
   let paidAmount = 0;
 
@@ -2471,12 +2498,18 @@ function renderReport() {
 
       // Advance payment/credit display
       let advanceDisplay = '';
-      // Show credit balance info
-      if (hasCredit) {
+      const creditUsed = creditUsedPerStudent[student] || 0;
+      const hasCreditHistory = creditUsed > 0 || creditBalance > 0;
+
+      // Show credit info if student has any credit history
+      if (hasCreditHistory) {
         advanceDisplay = `
           <div class="credit-balance-display">
-            <span class="credit-balance">₹${creditBalance.toLocaleString()} credit</span>
-            <span class="free-classes">(${freeClassesRemaining} class${freeClassesRemaining !== 1 ? 'es' : ''} free)</span>
+            ${creditUsed > 0 ? `<span class="credit-used">₹${creditUsed.toLocaleString()} used</span>` : ''}
+            ${creditBalance > 0 ? `
+              <span class="credit-balance">₹${creditBalance.toLocaleString()} remaining</span>
+              <span class="free-classes">(${freeClassesRemaining} free class${freeClassesRemaining !== 1 ? 'es' : ''})</span>
+            ` : creditUsed > 0 ? `<span class="credit-exhausted">₹0 remaining</span>` : ''}
             <button class="add-credit-btn" data-student="${escapeHtml(student)}" title="Add/Edit advance credit">
               Edit
             </button>
