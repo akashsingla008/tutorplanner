@@ -1406,6 +1406,252 @@ header .subtitle {
   transform: translateY(-1px);
 }
 
+/* Time Owed Summary Section */
+.time-owed-section {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid #f59e0b;
+}
+
+.time-owed-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.time-owed-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #92400e;
+}
+
+.time-owed-totals {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.time-owed-totals .total-time-owed {
+  font-weight: 700;
+  color: #d97706;
+  font-size: 1.1rem;
+}
+
+.time-owed-totals .total-students-owed {
+  font-size: 0.85rem;
+  color: #92400e;
+  background: #fcd34d;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.time-owed-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.time-owed-student-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  padding: 10px 14px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  gap: 12px;
+}
+
+.time-owed-student-name {
+  font-weight: 600;
+  color: #374151;
+  min-width: 100px;
+}
+
+.time-owed-student-details {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.time-owed-amount {
+  font-weight: 700;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.time-owed-classes {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.time-owed-details-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.time-owed-details-btn:hover {
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Time Owed Dialog */
+.time-owed-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.time-owed-dialog-content {
+  background: white;
+  border-radius: 16px;
+  max-width: 400px;
+  width: 100%;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+
+.time-owed-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-bottom: 1px solid #f59e0b;
+}
+
+.time-owed-dialog-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #92400e;
+}
+
+.time-owed-dialog-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #92400e;
+  padding: 0;
+  line-height: 1;
+}
+
+.time-owed-dialog-summary {
+  padding: 16px 20px;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.time-owed-dialog-summary strong {
+  color: #d97706;
+  font-size: 1.1rem;
+}
+
+.time-owed-dialog-summary span {
+  color: #92400e;
+  font-size: 0.85rem;
+}
+
+.time-owed-dialog-list {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.time-owed-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border-left: 3px solid #f59e0b;
+}
+
+.time-owed-detail-date {
+  font-weight: 600;
+  color: #374151;
+  min-width: 50px;
+}
+
+.time-owed-detail-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.time-owed-detail-minutes {
+  font-weight: 600;
+  color: #d97706;
+}
+
+.time-owed-detail-reason {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.time-owed-detail-actual {
+  font-size: 0.8rem;
+  color: #6b7280;
+  text-align: right;
+}
+
+.time-owed-dialog-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.time-owed-dialog-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.time-owed-dialog-btn:hover {
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+  transform: translateY(-1px);
+}
+
 /* Report Table */
 .report-table-container {
   background: white;

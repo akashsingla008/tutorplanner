@@ -2782,6 +2782,9 @@ function renderReport() {
   // Update credit summary card (shows total across ALL students, not just this period)
   updateCreditSummaryCard();
 
+  // Update time owed summary (from partial classes)
+  updateTimeOwedSummary();
+
   // Render earnings chart
   renderEarningsChart(classesInRange, studentStats, isClassCompleted);
 }
@@ -2892,6 +2895,146 @@ function updateCreditSummaryCard() {
   } else {
     creditSection.style.display = 'none';
   }
+}
+
+// Update time owed summary section with per-student breakdown of pending time from partial classes
+function updateTimeOwedSummary() {
+  const timeOwedSection = document.getElementById('timeOwedSection');
+  const totalTimeOwedEl = document.getElementById('totalTimeOwed');
+  const totalStudentsOwedEl = document.getElementById('totalStudentsOwed');
+  const studentListEl = document.getElementById('timeOwedStudentList');
+
+  if (!timeOwedSection || !totalTimeOwedEl || !totalStudentsOwedEl || !studentListEl) return;
+
+  // Calculate pending time per student from ALL partial classes (not just current period)
+  const pendingTimePerStudent = {};
+
+  classes.forEach(cls => {
+    if (cls.partialClass && cls.pendingMinutes > 0) {
+      if (!pendingTimePerStudent[cls.student]) {
+        pendingTimePerStudent[cls.student] = {
+          totalMinutes: 0,
+          partialClasses: []
+        };
+      }
+      pendingTimePerStudent[cls.student].totalMinutes += cls.pendingMinutes;
+      pendingTimePerStudent[cls.student].partialClasses.push({
+        date: cls.date,
+        pendingMinutes: cls.pendingMinutes,
+        actualMinutes: cls.actualMinutes,
+        reason: cls.partialReason || 'other'
+      });
+    }
+  });
+
+  const studentsWithPendingTime = Object.entries(pendingTimePerStudent)
+    .map(([student, data]) => ({
+      student,
+      totalMinutes: data.totalMinutes,
+      partialClasses: data.partialClasses.sort((a, b) => new Date(b.date) - new Date(a.date))
+    }))
+    .filter(s => s.totalMinutes > 0)
+    .sort((a, b) => b.totalMinutes - a.totalMinutes || a.student.localeCompare(b.student));
+
+  if (studentsWithPendingTime.length > 0) {
+    const totalMinutes = studentsWithPendingTime.reduce((sum, s) => sum + s.totalMinutes, 0);
+    const totalStudents = studentsWithPendingTime.length;
+
+    timeOwedSection.style.display = 'block';
+    totalTimeOwedEl.textContent = formatTimeOwed(totalMinutes);
+    totalStudentsOwedEl.textContent = `${totalStudents} student${totalStudents !== 1 ? 's' : ''}`;
+
+    studentListEl.innerHTML = studentsWithPendingTime.map(s => `
+      <div class="time-owed-student-row">
+        <div class="time-owed-student-name">${escapeHtml(s.student)}</div>
+        <div class="time-owed-student-details">
+          <span class="time-owed-amount">${formatTimeOwed(s.totalMinutes)}</span>
+          <span class="time-owed-classes">(${s.partialClasses.length} partial class${s.partialClasses.length !== 1 ? 'es' : ''})</span>
+        </div>
+        <button class="time-owed-details-btn" data-student="${escapeHtml(s.student)}" title="View details">
+          Details
+        </button>
+      </div>
+    `).join('');
+
+    // Add event listeners to details buttons
+    studentListEl.querySelectorAll('.time-owed-details-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const student = btn.dataset.student;
+        const studentData = studentsWithPendingTime.find(s => s.student === student);
+        if (studentData) {
+          showTimeOwedDetails(studentData);
+        }
+      });
+    });
+  } else {
+    timeOwedSection.style.display = 'none';
+  }
+}
+
+// Format time owed in a readable format
+function formatTimeOwed(minutes) {
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+  return `${minutes} mins`;
+}
+
+// Show details dialog for time owed to a specific student
+function showTimeOwedDetails(studentData) {
+  const existingDialog = document.querySelector('.time-owed-dialog');
+  if (existingDialog) existingDialog.remove();
+
+  const dialog = document.createElement('div');
+  dialog.className = 'time-owed-dialog';
+  dialog.innerHTML = `
+    <div class="time-owed-dialog-content">
+      <div class="time-owed-dialog-header">
+        <h3>⏱️ Time Owed: ${escapeHtml(studentData.student)}</h3>
+        <button class="time-owed-dialog-close">&times;</button>
+      </div>
+      <div class="time-owed-dialog-summary">
+        <strong>Total: ${formatTimeOwed(studentData.totalMinutes)}</strong>
+        <span>from ${studentData.partialClasses.length} partial class${studentData.partialClasses.length !== 1 ? 'es' : ''}</span>
+      </div>
+      <div class="time-owed-dialog-list">
+        ${studentData.partialClasses.map(pc => `
+          <div class="time-owed-detail-row">
+            <div class="time-owed-detail-date">${formatDateShort(pc.date)}</div>
+            <div class="time-owed-detail-info">
+              <span class="time-owed-detail-minutes">+${pc.pendingMinutes} mins owed</span>
+              <span class="time-owed-detail-reason">${PARTIAL_REASONS[pc.reason] || 'Other'}</span>
+            </div>
+            <div class="time-owed-detail-actual">
+              ${pc.actualMinutes} mins taken
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="time-owed-dialog-footer">
+        <button class="time-owed-dialog-btn">Close</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(dialog);
+
+  // Close handlers
+  const closeDialog = () => dialog.remove();
+  dialog.querySelector('.time-owed-dialog-close').addEventListener('click', closeDialog);
+  dialog.querySelector('.time-owed-dialog-btn').addEventListener('click', closeDialog);
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) closeDialog();
+  });
+}
+
+// Format date short (e.g., "Jan 5")
+function formatDateShort(dateStr) {
+  const date = new Date(dateStr);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[date.getMonth()]} ${date.getDate()}`;
 }
 
 // Render earnings chart
