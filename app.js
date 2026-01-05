@@ -104,6 +104,15 @@ const CANCEL_REASONS = {
   other: "Other Reason"
 };
 
+// Partial class reasons
+const PARTIAL_REASONS = {
+  student_late: "Student Late",
+  tutor_late: "Tutor Late",
+  early_end: "Ended Early",
+  interruption: "Interruption",
+  other: "Other Reason"
+};
+
 // Form fields
 const existingStudentSelect = document.getElementById("existingStudentSelect");
 const studentNameInput = document.getElementById("studentName");
@@ -985,10 +994,12 @@ function renderWeekGrid() {
                 const hasClash = clashingIndices.includes(i);
                 const isCancelled = c.cancelled;
                 const isPending = c.pendingConfirmation;
+                const isPartial = c.partialClass;
                 const cancelLabel = isCancelled ? CANCEL_REASONS[c.cancelReason] || 'Cancelled' : '';
+                const partialLabel = isPartial ? `${c.actualMinutes}/${getMinutesBetween(c.start, c.end)} mins` : '';
                 const isSelected = selectedClasses.has(globalIndex);
                 return `
-                  <div class="class-card ${hasClash ? 'clash' : ''} ${isCancelled ? 'cancelled' : ''} ${isPending ? 'pending' : ''} ${isSelected ? 'selected' : ''}"
+                  <div class="class-card ${hasClash ? 'clash' : ''} ${isCancelled ? 'cancelled' : ''} ${isPending ? 'pending' : ''} ${isPartial ? 'partial' : ''} ${isSelected ? 'selected' : ''}"
                        data-index="${globalIndex}"
                        draggable="${!isCancelled && !isPending && !isSelectMode}">
                     ${isSelectMode ? `
@@ -1001,6 +1012,7 @@ function renderWeekGrid() {
                       <div class="class-time">${formatTime(c.start)} - ${formatTime(c.end)}</div>
                       ${isCancelled ? `<div class="cancel-badge">${cancelLabel}</div>` : ''}
                       ${isPending ? `<div class="pending-badge">⏳ Awaiting confirmation</div>` : ''}
+                      ${isPartial ? `<div class="partial-badge">⚡ Partial: ${partialLabel}</div>` : ''}
                     </div>
                     ${!isCancelled && !isPending && !isSelectMode ? `<button class="copy-class-btn" data-index="${globalIndex}" title="Copy to another day">⧉</button>` : ''}
                   </div>
@@ -2355,18 +2367,48 @@ function renderReport() {
         advancePaidClasses: 0,
         advancePaidMinutes: 0,
         completedClassIds: [], // Track individual completed class IDs
-        upcomingClassIds: [] // Track individual upcoming class IDs for advance payment
+        upcomingClassIds: [], // Track individual upcoming class IDs for advance payment
+        classDetails: [], // Track full class details for actions
+        pendingTimeOwed: 0 // Track pending time from partial classes
       };
     }
     studentStats[c.student].total++;
+
+    // Track class details for actions
+    const classId = getClassPaymentId(c);
+    const scheduledMinutes = getMinutesBetween(c.start, c.end);
+    const actualMinutes = c.partialClass ? (c.actualMinutes || 0) : scheduledMinutes;
+
+    studentStats[c.student].classDetails.push({
+      classId,
+      date: c.date,
+      day: c.day,
+      start: c.start,
+      end: c.end,
+      scheduledMinutes,
+      actualMinutes,
+      isPartial: c.partialClass || false,
+      partialReason: c.partialReason,
+      pendingMinutes: c.pendingMinutes || 0,
+      isCancelled: c.cancelled || false,
+      cancelReason: c.cancelReason,
+      isPending: c.pendingConfirmation || false,
+      isPaid: paymentStatus[classId],
+      isCompleted: !c.cancelled && !c.pendingConfirmation && isClassCompleted(c)
+    });
+
+    // Track pending time owed from partial classes
+    if (c.partialClass && c.pendingMinutes > 0) {
+      studentStats[c.student].pendingTimeOwed += c.pendingMinutes;
+    }
+
     if (c.cancelled) {
       studentStats[c.student].cancelled++;
     } else if (c.pendingConfirmation) {
       studentStats[c.student].pending++;
     } else {
       // Check if class is completed or upcoming
-      const minutes = getMinutesBetween(c.start, c.end);
-      const classId = getClassPaymentId(c);
+      const minutes = c.partialClass ? actualMinutes : scheduledMinutes; // Use actual for partial
       if (isClassCompleted(c)) {
         studentStats[c.student].completed++;
         studentStats[c.student].completedMinutes += minutes;
@@ -2543,11 +2585,62 @@ function renderReport() {
         `;
       }
 
+      // Pending time owed badge
+      const pendingTimeOwed = stats.pendingTimeOwed || 0;
+      const pendingTimeBadge = pendingTimeOwed > 0 ? `<span class="pending-time-badge">⏱️ ${pendingTimeOwed} mins owed</span>` : '';
+
+      // Generate class details HTML for expandable section
+      const classDetailsHtml = stats.classDetails.map(cd => {
+        let statusBadge = '';
+        let statusClass = '';
+        if (cd.isCancelled) {
+          statusBadge = `<span class="class-status cancelled">${CANCEL_REASONS[cd.cancelReason] || 'Cancelled'}</span>`;
+          statusClass = 'cancelled-row';
+        } else if (cd.isPartial) {
+          statusBadge = `<span class="class-status partial">${cd.actualMinutes}/${cd.scheduledMinutes} mins</span>`;
+          statusClass = 'partial-row';
+        } else if (cd.isPending) {
+          statusBadge = `<span class="class-status pending">Awaiting</span>`;
+          statusClass = 'pending-row';
+        } else if (cd.isCompleted) {
+          statusBadge = cd.isPaid
+            ? `<span class="class-status paid">${cd.isPaid === 'credit' ? 'Credit' : 'Paid'}</span>`
+            : `<span class="class-status unpaid">Unpaid</span>`;
+          statusClass = cd.isPaid ? 'paid-row' : 'unpaid-row';
+        } else {
+          statusBadge = `<span class="class-status upcoming">Upcoming</span>`;
+          statusClass = 'upcoming-row';
+        }
+
+        const canEdit = cd.isCompleted && !cd.isCancelled;
+
+        return `
+          <div class="class-detail-row ${statusClass}">
+            <span class="class-date">${formatDateShort(new Date(cd.date))}</span>
+            <span class="class-time">${cd.start}-${cd.end}</span>
+            <span class="class-duration">${cd.isPartial ? cd.actualMinutes : cd.scheduledMinutes} mins</span>
+            ${statusBadge}
+            ${cd.pendingMinutes > 0 ? `<span class="pending-mins">+${cd.pendingMinutes} owed</span>` : ''}
+            ${canEdit || cd.isCancelled || cd.isPartial ? `
+              <button class="class-action-btn" data-class-id="${cd.classId}" data-student="${escapeHtml(student)}" title="Edit class status">
+                ✏️
+              </button>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+
       return `
-        <tr class="${rowClass}">
+        <tr class="${rowClass}" data-student="${escapeHtml(student)}">
           <td>
-            <strong>${escapeHtml(student)}</strong>
-            ${badges.length > 0 ? `<span class="student-pending-badge">${badges.join(', ')}</span>` : ''}
+            <div class="student-name-cell">
+              <strong>${escapeHtml(student)}</strong>
+              ${badges.length > 0 ? `<span class="student-pending-badge">${badges.join(', ')}</span>` : ''}
+              ${pendingTimeBadge}
+            </div>
+            <button class="expand-classes-btn" data-student="${escapeHtml(student)}" title="View/Edit individual classes">
+              📋 Classes
+            </button>
           </td>
           <td>${completedClasses}${(hasUpcomingClasses || hasPendingClasses) ? ` <span class="pending-count">(+${upcomingClasses + stats.pending})</span>` : ''}</td>
           <td class="cancelled-count">${stats.cancelled > 0 ? stats.cancelled : '-'}</td>
@@ -2573,6 +2666,14 @@ function renderReport() {
           </td>
           <td class="advance-credit-cell">
             ${advanceCreditDisplay}
+          </td>
+        </tr>
+        <tr class="class-details-row hidden" data-student-details="${escapeHtml(student)}">
+          <td colspan="8">
+            <div class="class-details-container">
+              <div class="class-details-header">Classes for ${escapeHtml(student)}</div>
+              ${classDetailsHtml}
+            </div>
           </td>
         </tr>
       `;
@@ -2641,6 +2742,27 @@ function renderReport() {
       btn.addEventListener('click', (e) => {
         const student = e.target.dataset.student;
         showAddCreditDialog(student);
+      });
+    });
+
+    // Add event listeners to expand classes buttons
+    tbody.querySelectorAll('.expand-classes-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const student = e.target.dataset.student;
+        const detailsRow = tbody.querySelector(`tr[data-student-details="${student}"]`);
+        if (detailsRow) {
+          detailsRow.classList.toggle('hidden');
+          e.target.textContent = detailsRow.classList.contains('hidden') ? '📋 Classes' : '📋 Hide';
+        }
+      });
+    });
+
+    // Add event listeners to class action buttons
+    tbody.querySelectorAll('.class-action-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const classId = e.target.dataset.classId;
+        const student = e.target.dataset.student;
+        showClassActionDialog(classId, student);
       });
     });
   }
@@ -3364,6 +3486,218 @@ function showAddCreditDialog(student) {
 
 function closeAddCreditDialog() {
   const dialog = document.getElementById('addCreditDialog');
+  if (dialog) dialog.remove();
+}
+
+// Show dialog to cancel or mark class as partial from Reports
+function showClassActionDialog(classId, student) {
+  // Find the class by its payment ID
+  const classIndex = classes.findIndex(c => getClassPaymentId(c) === classId);
+  if (classIndex === -1) {
+    showToast('Class not found');
+    return;
+  }
+
+  const cls = classes[classIndex];
+  const scheduledMinutes = getMinutesBetween(cls.start, cls.end);
+  const actualMinutes = cls.actualMinutes || scheduledMinutes;
+  const isPartial = cls.partialClass || false;
+  const isCancelled = cls.cancelled || false;
+
+  // Remove existing dialog if any
+  closeClassActionDialog();
+
+  const dialog = document.createElement('div');
+  dialog.id = 'classActionDialog';
+  dialog.className = 'modal-overlay';
+  dialog.innerHTML = `
+    <div class="modal-content class-action-dialog">
+      <div class="class-action-header">
+        <h3>Class Actions</h3>
+        <button class="close-btn" id="closeClassActionBtn">&times;</button>
+      </div>
+      <div class="class-action-info">
+        <div class="info-row"><strong>Student:</strong> ${escapeHtml(student)}</div>
+        <div class="info-row"><strong>Date:</strong> ${formatDateShort(new Date(cls.date))} (${cls.day})</div>
+        <div class="info-row"><strong>Time:</strong> ${cls.start} - ${cls.end} (${scheduledMinutes} mins)</div>
+        ${isPartial ? `<div class="info-row partial-info"><strong>Status:</strong> Partial - ${actualMinutes} mins taken</div>` : ''}
+        ${isCancelled ? `<div class="info-row cancelled-info"><strong>Status:</strong> Cancelled - ${CANCEL_REASONS[cls.cancelReason] || 'Unknown'}</div>` : ''}
+      </div>
+
+      <div class="class-action-tabs">
+        <button class="action-tab ${!isCancelled && !isPartial ? 'active' : ''}" data-tab="partial">Mark Partial</button>
+        <button class="action-tab" data-tab="cancel">Cancel Class</button>
+        ${(isPartial || isCancelled) ? '<button class="action-tab" data-tab="restore">Restore</button>' : ''}
+      </div>
+
+      <div class="action-tab-content" id="partialTabContent">
+        <p class="tab-description">Record if the class was taken partially. The pending time will be tracked.</p>
+        <div class="partial-time-input">
+          <label>Actual time taken:</label>
+          <div class="time-input-row">
+            <input type="number" id="actualMinutesInput" value="${actualMinutes}" min="0" max="${scheduledMinutes}" step="5" />
+            <span>mins (of ${scheduledMinutes} scheduled)</span>
+          </div>
+          <div class="quick-time-btns">
+            ${[15, 30, 45].filter(t => t < scheduledMinutes).map(t =>
+              `<button class="quick-time-btn" data-mins="${t}">${t} mins</button>`
+            ).join('')}
+            <button class="quick-time-btn" data-mins="${Math.floor(scheduledMinutes/2)}">${Math.floor(scheduledMinutes/2)} mins (half)</button>
+          </div>
+        </div>
+        <div class="partial-reason-select">
+          <label>Reason:</label>
+          <select id="partialReasonSelect">
+            ${Object.entries(PARTIAL_REASONS).map(([key, label]) =>
+              `<option value="${key}" ${cls.partialReason === key ? 'selected' : ''}>${label}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div class="pending-time-preview" id="pendingTimePreview"></div>
+        <button class="btn-primary" id="savePartialBtn">Save as Partial</button>
+      </div>
+
+      <div class="action-tab-content hidden" id="cancelTabContent">
+        <p class="tab-description">Mark this class as cancelled. It won't count towards hours or payment.</p>
+        <div class="cancel-reason-select">
+          <label>Reason for cancellation:</label>
+          <select id="cancelReasonSelect">
+            ${Object.entries(CANCEL_REASONS).map(([key, label]) =>
+              `<option value="${key}">${label}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <button class="btn-danger" id="saveCancelBtn">Cancel This Class</button>
+      </div>
+
+      <div class="action-tab-content hidden" id="restoreTabContent">
+        <p class="tab-description">Restore this class to its original scheduled state.</p>
+        <button class="btn-success" id="saveRestoreBtn">Restore Class</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(dialog);
+
+  // Tab switching
+  dialog.querySelectorAll('.action-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      dialog.querySelectorAll('.action-tab').forEach(t => t.classList.remove('active'));
+      dialog.querySelectorAll('.action-tab-content').forEach(c => c.classList.add('hidden'));
+      tab.classList.add('active');
+      document.getElementById(`${tab.dataset.tab}TabContent`).classList.remove('hidden');
+    });
+  });
+
+  // Quick time buttons
+  dialog.querySelectorAll('.quick-time-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('actualMinutesInput').value = btn.dataset.mins;
+      updatePendingPreview();
+    });
+  });
+
+  // Update pending time preview
+  const updatePendingPreview = () => {
+    const actual = parseInt(document.getElementById('actualMinutesInput').value) || 0;
+    const pending = scheduledMinutes - actual;
+    const preview = document.getElementById('pendingTimePreview');
+    if (pending > 0) {
+      preview.innerHTML = `<span class="pending-highlight">⏱️ ${pending} mins will be owed to ${escapeHtml(student)}</span>`;
+    } else {
+      preview.innerHTML = '<span class="no-pending">No pending time</span>';
+    }
+  };
+
+  document.getElementById('actualMinutesInput').addEventListener('input', updatePendingPreview);
+  updatePendingPreview();
+
+  // Save partial
+  document.getElementById('savePartialBtn').addEventListener('click', () => {
+    const actual = parseInt(document.getElementById('actualMinutesInput').value) || 0;
+    const reason = document.getElementById('partialReasonSelect').value;
+
+    if (actual >= scheduledMinutes) {
+      showToast('Actual time must be less than scheduled time for partial class');
+      return;
+    }
+
+    if (actual <= 0) {
+      showToast('Use "Cancel Class" if no time was taken');
+      return;
+    }
+
+    // Update class
+    classes[classIndex].partialClass = true;
+    classes[classIndex].actualMinutes = actual;
+    classes[classIndex].pendingMinutes = scheduledMinutes - actual;
+    classes[classIndex].partialReason = reason;
+    classes[classIndex].cancelled = false; // In case it was cancelled before
+    delete classes[classIndex].cancelReason;
+
+    saveClasses();
+    closeClassActionDialog();
+    renderReport();
+    renderWeekGrid();
+    showToast(`Class marked as partial: ${actual} mins taken, ${scheduledMinutes - actual} mins pending`);
+  });
+
+  // Save cancel
+  document.getElementById('saveCancelBtn').addEventListener('click', () => {
+    const reason = document.getElementById('cancelReasonSelect').value;
+
+    classes[classIndex].cancelled = true;
+    classes[classIndex].cancelReason = reason;
+    classes[classIndex].cancelledAt = new Date().toISOString();
+    // Clear partial status if any
+    delete classes[classIndex].partialClass;
+    delete classes[classIndex].actualMinutes;
+    delete classes[classIndex].pendingMinutes;
+    delete classes[classIndex].partialReason;
+
+    // Clear payment status for this class
+    delete paymentStatus[classId];
+    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+
+    saveClasses();
+    closeClassActionDialog();
+    renderReport();
+    renderWeekGrid();
+    showToast(`Class cancelled: ${CANCEL_REASONS[reason]}`);
+  });
+
+  // Save restore
+  const restoreBtn = document.getElementById('saveRestoreBtn');
+  if (restoreBtn) {
+    restoreBtn.addEventListener('click', () => {
+      // Restore class to normal state
+      classes[classIndex].cancelled = false;
+      delete classes[classIndex].cancelReason;
+      delete classes[classIndex].cancelledAt;
+      delete classes[classIndex].partialClass;
+      delete classes[classIndex].actualMinutes;
+      delete classes[classIndex].pendingMinutes;
+      delete classes[classIndex].partialReason;
+
+      saveClasses();
+      closeClassActionDialog();
+      renderReport();
+      renderWeekGrid();
+      showToast('Class restored to normal');
+    });
+  }
+
+  // Close button
+  document.getElementById('closeClassActionBtn').addEventListener('click', closeClassActionDialog);
+
+  // Close on overlay click
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) closeClassActionDialog();
+  });
+}
+
+function closeClassActionDialog() {
+  const dialog = document.getElementById('classActionDialog');
   if (dialog) dialog.remove();
 }
 
