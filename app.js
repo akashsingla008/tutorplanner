@@ -2530,8 +2530,7 @@ function renderReport() {
           <div class="advance-credit-info">
             ${creditUsed > 0 ? `<div class="credit-used-row">₹${creditUsed.toLocaleString()} used</div>` : ''}
             ${creditBalance > 0 ? `
-              <div class="credit-remaining-row">₹${creditBalance.toLocaleString()} left</div>
-              <div class="credit-free-row">${freeClassesRemaining} free class${freeClassesRemaining !== 1 ? 'es' : ''}</div>
+              <div class="credit-remaining-row">₹${creditBalance.toLocaleString()} left <span class="credit-free-inline">(${freeClassesRemaining} free)</span></div>
             ` : creditUsed > 0 ? `<div class="credit-exhausted-row">Exhausted</div>` : ''}
             <button class="add-credit-btn small" data-student="${escapeHtml(student)}" title="Edit credit">Edit</button>
           </div>

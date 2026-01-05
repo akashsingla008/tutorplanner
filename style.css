@@ -3509,6 +3509,12 @@ header .subtitle {
   font-weight: 600;
 }
 
+.credit-free-inline {
+  font-weight: 500;
+  color: #6d28d9;
+  font-size: 11px;
+}
+
 .credit-free-row {
   color: #6d28d9;
   font-size: 11px;
