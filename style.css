@@ -1241,6 +1241,32 @@ header .subtitle {
   border-left-color: #3b82f6;
 }
 
+.summary-card.credit {
+  border-left-color: #8b5cf6;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  cursor: pointer;
+}
+
+.summary-card.credit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+}
+
+.summary-card.credit .summary-value {
+  color: #7c3aed;
+}
+
+.summary-sublabel {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.summary-card.credit .summary-sublabel {
+  color: #8b5cf6;
+}
+
 .summary-value {
   font-size: 1.75rem;
   font-weight: 700;

@@ -2603,8 +2603,50 @@ function renderReport() {
     ? `<span class="pending-indicator">₹${pendingAmount.toLocaleString()} pending</span>`
     : '<span class="paid-indicator">All Paid ✓</span>';
 
+  // Update credit summary card (shows total across ALL students, not just this period)
+  updateCreditSummaryCard();
+
   // Render earnings chart
   renderEarningsChart(classesInRange, studentStats, isClassCompleted);
+}
+
+// Update credit summary card with total advance credit across all students
+function updateCreditSummaryCard() {
+  const creditCard = document.getElementById('creditSummaryCard');
+  const creditBalanceEl = document.getElementById('totalCreditBalance');
+  const freeClassesEl = document.getElementById('totalFreeClasses');
+
+  if (!creditCard || !creditBalanceEl || !freeClassesEl) return;
+
+  // Calculate total credit balance across all students
+  let totalCredit = 0;
+  let totalFreeClasses = 0;
+  const studentCredits = [];
+
+  Object.keys(advanceCredits).forEach(student => {
+    const credit = advanceCredits[student] || 0;
+    if (credit > 0) {
+      totalCredit += credit;
+      const rate = studentRates[student] || defaultRate;
+      const freeClasses = rate > 0 ? Math.floor(credit / rate) : 0;
+      totalFreeClasses += freeClasses;
+      studentCredits.push({ student, credit, freeClasses });
+    }
+  });
+
+  if (totalCredit > 0) {
+    creditCard.style.display = 'flex';
+    creditBalanceEl.textContent = `₹${totalCredit.toLocaleString()}`;
+    freeClassesEl.textContent = `${totalFreeClasses} free class${totalFreeClasses !== 1 ? 'es' : ''} remaining`;
+
+    // Add tooltip with per-student breakdown
+    const breakdown = studentCredits.map(s =>
+      `${s.student}: ₹${s.credit.toLocaleString()} (${s.freeClasses} class${s.freeClasses !== 1 ? 'es' : ''})`
+    ).join('\n');
+    creditCard.title = breakdown;
+  } else {
+    creditCard.style.display = 'none';
+  }
 }
 
 // Render earnings chart
