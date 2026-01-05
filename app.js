@@ -2496,29 +2496,27 @@ function renderReport() {
         }
       }
 
-      // Advance payment/credit display
-      let advanceDisplay = '';
+      // Calculate credit used for this student
       const creditUsed = creditUsedPerStudent[student] || 0;
       const hasCreditHistory = creditUsed > 0 || creditBalance > 0;
 
-      // Show credit info if student has any credit history
+      // Build advance credit column content
+      let advanceCreditDisplay = '';
       if (hasCreditHistory) {
-        advanceDisplay = `
-          <div class="credit-balance-display">
-            ${creditUsed > 0 ? `<span class="credit-used">₹${creditUsed.toLocaleString()} used</span>` : ''}
+        advanceCreditDisplay = `
+          <div class="advance-credit-info">
+            ${creditUsed > 0 ? `<div class="credit-used-row">₹${creditUsed.toLocaleString()} used</div>` : ''}
             ${creditBalance > 0 ? `
-              <span class="credit-balance">₹${creditBalance.toLocaleString()} remaining</span>
-              <span class="free-classes">(${freeClassesRemaining} free class${freeClassesRemaining !== 1 ? 'es' : ''})</span>
-            ` : creditUsed > 0 ? `<span class="credit-exhausted">₹0 remaining</span>` : ''}
-            <button class="add-credit-btn" data-student="${escapeHtml(student)}" title="Add/Edit advance credit">
-              Edit
-            </button>
+              <div class="credit-remaining-row">₹${creditBalance.toLocaleString()} left</div>
+              <div class="credit-free-row">${freeClassesRemaining} free class${freeClassesRemaining !== 1 ? 'es' : ''}</div>
+            ` : creditUsed > 0 ? `<div class="credit-exhausted-row">Exhausted</div>` : ''}
+            <button class="add-credit-btn small" data-student="${escapeHtml(student)}" title="Edit credit">Edit</button>
           </div>
         `;
-      } else if (hasUpcomingClasses || !hasCompletedClasses) {
-        advanceDisplay = `
-          <button class="add-credit-btn" data-student="${escapeHtml(student)}" title="Record advance payment">
-            💰 Add Advance
+      } else {
+        advanceCreditDisplay = `
+          <button class="add-credit-btn" data-student="${escapeHtml(student)}" title="Add advance credit">
+            + Add
           </button>
         `;
       }
@@ -2540,7 +2538,6 @@ function renderReport() {
           </td>
           <td class="amount">
             ${hasCompletedClasses ? `₹${amount.toLocaleString()}${unpaidAmount > 0 ? ` <span class="unpaid-amount">(₹${unpaidAmount.toLocaleString()} unpaid)</span>` : ''}` : '-'}
-            ${hasCredit ? `<br><span class="advance-amount">Credit: ₹${creditBalance.toLocaleString()}</span>` : ''}
           </td>
           <td class="payment-cell">
             ${hasCompletedClasses ? `
@@ -2550,8 +2547,10 @@ function renderReport() {
                   📩
                 </button>
               ` : ''}
-            ` : ''}
-            <div class="advance-section">${advanceDisplay}</div>
+            ` : '-'}
+          </td>
+          <td class="advance-credit-cell">
+            ${advanceCreditDisplay}
           </td>
         </tr>
       `;

@@ -3475,9 +3475,54 @@ header .subtitle {
   transition: all 0.2s;
 }
 
+.add-credit-btn.small {
+  padding: 2px 8px;
+  font-size: 10px;
+  margin-left: 0;
+  margin-top: 4px;
+}
+
 .add-credit-btn:hover {
   box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
   transform: translateY(-1px);
+}
+
+/* Advance Credit Column */
+.advance-credit-cell {
+  min-width: 120px;
+}
+
+.advance-credit-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.credit-used-row {
+  color: #059669;
+  font-weight: 500;
+}
+
+.credit-remaining-row {
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.credit-free-row {
+  color: #6d28d9;
+  font-size: 11px;
+  background: #ede9fe;
+  padding: 2px 6px;
+  border-radius: 8px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.credit-exhausted-row {
+  color: #9ca3af;
+  font-style: italic;
+  font-size: 11px;
 }
 
 /* Credit Dialog */
