@@ -2643,42 +2643,99 @@ function renderReport() {
   renderEarningsChart(classesInRange, studentStats, isClassCompleted);
 }
 
-// Update credit summary card with total advance credit across all students
+// Update credit summary section with detailed per-student breakdown
 function updateCreditSummaryCard() {
-  const creditCard = document.getElementById('creditSummaryCard');
+  const creditSection = document.getElementById('creditSummarySection');
   const creditBalanceEl = document.getElementById('totalCreditBalance');
   const freeClassesEl = document.getElementById('totalFreeClasses');
+  const studentListEl = document.getElementById('creditStudentList');
 
-  if (!creditCard || !creditBalanceEl || !freeClassesEl) return;
+  if (!creditSection || !creditBalanceEl || !freeClassesEl || !studentListEl) return;
 
-  // Calculate total credit balance across all students
+  // Calculate credit used per student (from all credit-paid classes)
+  const creditUsedPerStudent = calculateCreditUsedPerStudent();
+
+  // Build detailed student credit data
   let totalCredit = 0;
   let totalFreeClasses = 0;
+  let totalUsed = 0;
+  let totalClassesPaid = 0;
   const studentCredits = [];
 
-  Object.keys(advanceCredits).forEach(student => {
-    const credit = advanceCredits[student] || 0;
-    if (credit > 0) {
-      totalCredit += credit;
-      const rate = studentRates[student] || defaultRate;
-      const freeClasses = rate > 0 ? Math.floor(credit / rate) : 0;
-      totalFreeClasses += freeClasses;
-      studentCredits.push({ student, credit, freeClasses });
-    }
+  // Get all students who have credit balance OR have used credit
+  const allCreditStudents = new Set([
+    ...Object.keys(advanceCredits).filter(s => advanceCredits[s] > 0),
+    ...Object.keys(creditUsedPerStudent).filter(s => creditUsedPerStudent[s] > 0)
+  ]);
+
+  allCreditStudents.forEach(student => {
+    const creditRemaining = advanceCredits[student] || 0;
+    const creditUsed = creditUsedPerStudent[student] || 0;
+    const rate = studentRates[student] || defaultRate;
+    const freeClasses = rate > 0 ? Math.floor(creditRemaining / rate) : 0;
+    const classesPaidFromCredit = creditUsed > 0 && rate > 0 ? Math.round(creditUsed / rate) : 0;
+
+    totalCredit += creditRemaining;
+    totalFreeClasses += freeClasses;
+    totalUsed += creditUsed;
+    totalClassesPaid += classesPaidFromCredit;
+
+    studentCredits.push({
+      student,
+      creditRemaining,
+      creditUsed,
+      freeClasses,
+      classesPaidFromCredit,
+      rate
+    });
   });
 
-  if (totalCredit > 0) {
-    creditCard.style.display = 'flex';
-    creditBalanceEl.textContent = `₹${totalCredit.toLocaleString()}`;
+  // Sort by remaining credit (highest first), then by name
+  studentCredits.sort((a, b) => {
+    if (b.creditRemaining !== a.creditRemaining) return b.creditRemaining - a.creditRemaining;
+    return a.student.localeCompare(b.student);
+  });
+
+  if (studentCredits.length > 0) {
+    creditSection.style.display = 'block';
+    creditBalanceEl.textContent = `₹${totalCredit.toLocaleString()} remaining`;
     freeClassesEl.textContent = `${totalFreeClasses} free class${totalFreeClasses !== 1 ? 'es' : ''} remaining`;
 
-    // Add tooltip with per-student breakdown
-    const breakdown = studentCredits.map(s =>
-      `${s.student}: ₹${s.credit.toLocaleString()} (${s.freeClasses} class${s.freeClasses !== 1 ? 'es' : ''})`
-    ).join('\n');
-    creditCard.title = breakdown;
+    // Render per-student breakdown
+    studentListEl.innerHTML = studentCredits.map(s => `
+      <div class="credit-student-row ${s.creditRemaining === 0 ? 'exhausted' : ''}">
+        <div class="credit-student-name">${escapeHtml(s.student)}</div>
+        <div class="credit-student-details">
+          ${s.creditUsed > 0 ? `
+            <span class="credit-detail used">
+              ₹${s.creditUsed.toLocaleString()} used
+              <small>(${s.classesPaidFromCredit} class${s.classesPaidFromCredit !== 1 ? 'es' : ''})</small>
+            </span>
+          ` : ''}
+          ${s.creditRemaining > 0 ? `
+            <span class="credit-detail remaining">
+              ₹${s.creditRemaining.toLocaleString()} left
+              <small>(${s.freeClasses} free)</small>
+            </span>
+          ` : s.creditUsed > 0 ? `
+            <span class="credit-detail exhausted-label">Credit exhausted</span>
+          ` : ''}
+        </div>
+        <button class="credit-edit-btn" data-student="${escapeHtml(s.student)}" title="Edit credit">
+          Edit
+        </button>
+      </div>
+    `).join('');
+
+    // Add event listeners to edit buttons
+    studentListEl.querySelectorAll('.credit-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const student = btn.dataset.student;
+        showAddCreditDialog(student);
+      });
+    });
   } else {
-    creditCard.style.display = 'none';
+    creditSection.style.display = 'none';
   }
 }
 

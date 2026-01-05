@@ -1279,6 +1279,133 @@ header .subtitle {
   margin-top: 4px;
 }
 
+/* Credit Summary Section */
+.credit-summary-section {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid #c4b5fd;
+}
+
+.credit-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.credit-summary-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #5b21b6;
+}
+
+.credit-summary-totals {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.credit-summary-totals .total-credit {
+  font-weight: 700;
+  color: #7c3aed;
+  font-size: 1.1rem;
+}
+
+.credit-summary-totals .total-free-classes {
+  font-size: 0.85rem;
+  color: #6d28d9;
+  background: #ddd6fe;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.credit-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.credit-student-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  padding: 10px 14px;
+  border-radius: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.credit-student-row.exhausted {
+  background: #f9fafb;
+  opacity: 0.8;
+}
+
+.credit-student-name {
+  font-weight: 600;
+  color: #374151;
+  min-width: 100px;
+}
+
+.credit-student-details {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.credit-detail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 10px;
+}
+
+.credit-detail small {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.credit-detail.used {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.credit-detail.remaining {
+  background: #ddd6fe;
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.credit-detail.exhausted-label {
+  color: #6b7280;
+  font-style: italic;
+  background: #f3f4f6;
+}
+
+.credit-edit-btn {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.credit-edit-btn:hover {
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+  transform: translateY(-1px);
+}
+
 /* Report Table */
 .report-table-container {
   background: white;

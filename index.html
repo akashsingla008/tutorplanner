@@ -143,10 +143,19 @@
       <div class="summary-value" id="totalHours">0</div>
       <div class="summary-label">Total Hours</div>
     </div>
-    <div class="summary-card credit" id="creditSummaryCard" style="display: none;">
-      <div class="summary-value" id="totalCreditBalance">₹0</div>
-      <div class="summary-label">Advance Credit</div>
-      <div class="summary-sublabel" id="totalFreeClasses">0 free classes</div>
+  </div>
+
+  <!-- Detailed Advance Credit Section -->
+  <div class="credit-summary-section" id="creditSummarySection" style="display: none;">
+    <div class="credit-summary-header">
+      <h3>💰 Advance Credit Summary</h3>
+      <div class="credit-summary-totals">
+        <span class="total-credit" id="totalCreditBalance">₹0</span>
+        <span class="total-free-classes" id="totalFreeClasses">0 free classes remaining</span>
+      </div>
+    </div>
+    <div class="credit-student-list" id="creditStudentList">
+      <!-- Per-student breakdown will be rendered dynamically -->
     </div>
   </div>
 
