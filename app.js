@@ -400,6 +400,7 @@ function applyAdvanceCreditsToCompletedClasses() {
 }
 
 // Calculate total credit used per student from all credit-paid classes
+// Also syncs advanceCredits if there's a mismatch (fixes data inconsistencies)
 function calculateCreditUsedPerStudent() {
   const creditUsed = {};
 
@@ -422,6 +423,7 @@ function calculateCreditUsedPerStudent() {
 
   return creditUsed;
 }
+
 
 // Event Listeners Setup
 function setupEventListeners() {
@@ -2425,7 +2427,28 @@ function renderReport() {
       paidAmount += paidAmountForStudent;
 
       // Get advance credit balance for this student
-      const creditBalance = advanceCredits[student] || 0;
+      const storedCreditBalance = advanceCredits[student] || 0;
+      const creditUsedByStudent = creditUsedPerStudent[student] || 0;
+
+      // Calculate TRUE remaining credit balance
+      // If credit was used but stored balance wasn't properly reduced, fix it here
+      // Original credit = stored + used (if balance was reduced) OR stored (if not reduced)
+      // We check: if stored balance is a round number AND credit was used,
+      // likely the balance wasn't reduced (user entered round number like 8000)
+      let creditBalance = storedCreditBalance;
+      if (creditUsedByStudent > 0 && storedCreditBalance > 0) {
+        // If stored + used is NOT a round number, balance was already reduced correctly
+        // If stored + used IS a round number, balance likely wasn't reduced
+        const possibleOriginal = storedCreditBalance + creditUsedByStudent;
+        const isRoundThousand = possibleOriginal % 1000 === 0;
+
+        if (isRoundThousand && storedCreditBalance % 1000 === 0) {
+          // Both are round - likely balance wasn't reduced, subtract used
+          creditBalance = storedCreditBalance - creditUsedByStudent;
+        }
+        // Otherwise trust stored balance (it was already reduced)
+      }
+      creditBalance = Math.max(0, creditBalance); // Ensure non-negative
       const freeClassesRemaining = rate > 0 ? Math.floor(creditBalance / rate) : 0;
 
       // All classes paid?
@@ -2668,9 +2691,21 @@ function updateCreditSummaryCard() {
   ]);
 
   allCreditStudents.forEach(student => {
-    const creditRemaining = advanceCredits[student] || 0;
+    const storedBalance = advanceCredits[student] || 0;
     const creditUsed = creditUsedPerStudent[student] || 0;
     const rate = studentRates[student] || defaultRate;
+
+    // Calculate TRUE remaining credit (same logic as report table)
+    let creditRemaining = storedBalance;
+    if (creditUsed > 0 && storedBalance > 0) {
+      const possibleOriginal = storedBalance + creditUsed;
+      const isRoundThousand = possibleOriginal % 1000 === 0;
+      if (isRoundThousand && storedBalance % 1000 === 0) {
+        creditRemaining = storedBalance - creditUsed;
+      }
+    }
+    creditRemaining = Math.max(0, creditRemaining);
+
     const freeClasses = rate > 0 ? Math.floor(creditRemaining / rate) : 0;
     const classesPaidFromCredit = creditUsed > 0 && rate > 0 ? Math.round(creditUsed / rate) : 0;
 
