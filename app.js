@@ -4588,7 +4588,7 @@ function updateSharePreview() {
   };
 
   const message = generateProgressShareText(student, options);
-  previewContent.textContent = message;
+  previewContent.value = message;
 }
 
 // Open share progress modal
@@ -4619,19 +4619,12 @@ async function shareViaWhatsApp() {
   const student = document.getElementById('progressStudentSelect')?.value;
   if (!student) return;
 
-  const options = {
-    marksChart: document.getElementById('shareMarksChart')?.checked,
-    marksSummary: document.getElementById('shareMarksSummary')?.checked,
-    recentMarks: document.getElementById('shareRecentMarks')?.checked,
-    homework: document.getElementById('shareHomework')?.checked,
-    examDates: document.getElementById('shareExamDates')?.checked,
-    progressNotes: document.getElementById('shareProgressNotes')?.checked
-  };
-
-  const message = generateProgressShareText(student, options);
+  // Get the edited message from the textarea (user may have modified it)
+  const message = document.getElementById('sharePreviewContent')?.value || '';
+  const includeChart = document.getElementById('shareMarksChart')?.checked;
 
   // Try to share with chart image if selected and Web Share API supports files
-  if (options.marksChart && navigator.canShare) {
+  if (includeChart && navigator.canShare) {
     try {
       const chartBlob = await convertChartToImage(student);
       const chartFile = new File([chartBlob], `${student}_progress_chart.png`, { type: 'image/png' });
@@ -4656,7 +4649,7 @@ async function shareViaWhatsApp() {
   window.open(whatsappUrl, '_blank');
 
   // If chart was selected, offer to download it separately
-  if (options.marksChart) {
+  if (includeChart) {
     try {
       const chartBlob = await convertChartToImage(student);
       const url = URL.createObjectURL(chartBlob);
@@ -4680,18 +4673,13 @@ async function shareViaWhatsApp() {
 
 // Copy share text to clipboard
 async function copyShareText() {
-  const student = document.getElementById('progressStudentSelect')?.value;
-  if (!student) return;
+  // Get the edited message from the textarea (user may have modified it)
+  const message = document.getElementById('sharePreviewContent')?.value || '';
 
-  const options = {
-    marksSummary: document.getElementById('shareMarksSummary')?.checked,
-    recentMarks: document.getElementById('shareRecentMarks')?.checked,
-    homework: document.getElementById('shareHomework')?.checked,
-    examDates: document.getElementById('shareExamDates')?.checked,
-    progressNotes: document.getElementById('shareProgressNotes')?.checked
-  };
-
-  const message = generateProgressShareText(student, options);
+  if (!message.trim()) {
+    showToast('Nothing to copy');
+    return;
+  }
 
   try {
     await navigator.clipboard.writeText(message);

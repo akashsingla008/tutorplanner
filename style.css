@@ -4238,17 +4238,34 @@ header .subtitle {
   padding: 8px 12px;
   background: #f3f4f6;
   border-bottom: 1px solid #e5e7eb;
-  position: sticky;
-  top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.share-preview-content {
+.preview-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+textarea.share-preview-content {
+  width: 100%;
+  min-height: 150px;
+  max-height: 200px;
   padding: 12px;
   font-size: 13px;
-  white-space: pre-wrap;
   font-family: inherit;
   color: #374151;
   line-height: 1.5;
+  border: none;
+  resize: vertical;
+  background: white;
+}
+
+textarea.share-preview-content:focus {
+  outline: none;
+  background: #fefefe;
 }
 
 .share-actions {
