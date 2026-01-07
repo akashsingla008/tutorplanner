@@ -1251,7 +1251,7 @@ function showToast(message) {
   }, 2000);
 }
 
-// Find clashing classes within a day (ignoring cancelled classes)
+// Find clashing classes within a day (ignoring cancelled classes and allowed clashes)
 function findClashingClasses(dayClasses) {
   const clashing = [];
   for (let i = 0; i < dayClasses.length; i++) {
@@ -1259,8 +1259,12 @@ function findClashingClasses(dayClasses) {
     for (let j = i + 1; j < dayClasses.length; j++) {
       if (dayClasses[j].cancelled) continue; // Skip cancelled classes
       if (timesOverlap(dayClasses[i], dayClasses[j])) {
-        if (!clashing.includes(i)) clashing.push(i);
-        if (!clashing.includes(j)) clashing.push(j);
+        // Only mark as clashing if NEITHER class has allowedClash flag
+        // (if either has it, the user intentionally allowed this clash)
+        if (!dayClasses[i].allowedClash && !dayClasses[j].allowedClash) {
+          if (!clashing.includes(i)) clashing.push(i);
+          if (!clashing.includes(j)) clashing.push(j);
+        }
       }
     }
   }
@@ -1585,8 +1589,11 @@ function handleFormSubmit(e) {
   }
 
   // Mark class as having allowed clash if override was used
+  // Also mark any clashing existing classes with the flag
   if (allowClashOverride) {
     cls.allowedClash = true;
+    // Mark all clashing existing classes with allowedClash too
+    markClashingClassesAsAllowed(cls, editingIndex);
   }
 
   if (editingIndex !== null) {
@@ -1657,8 +1664,10 @@ function handleCheckWithStudent() {
   }
 
   // Mark class as having allowed clash if override was used
+  // Also mark any clashing existing classes with the flag
   if (allowClashOverride) {
     cls.allowedClash = true;
+    markClashingClassesAsAllowed(cls, editingIndex);
   }
 
   if (editingIndex !== null) {
@@ -1789,14 +1798,8 @@ function handleRestoreClass() {
   delete testClass.cancelledAt;
   delete testClass.customCancelReason;
 
-  // Check for clashes with other non-cancelled classes
-  const wouldClash = classes.some((c, i) => {
-    if (i === editingIndex) return false;
-    if (c.cancelled) return false;
-    return c.day === testClass.day && timesOverlap(testClass, c);
-  });
-
-  if (wouldClash) {
+  // Check for clashes with other non-cancelled classes (using hasClash which respects allowedClash flag)
+  if (hasClash(testClass, editingIndex)) {
     alert("Cannot restore: This slot now has a time clash with another class.");
     return;
   }
@@ -1928,9 +1931,24 @@ function hasClash(newClass, excludeIndex = null) {
   return classes.some((c, i) => {
     if (excludeIndex !== null && i === excludeIndex) return false;
     if (c.cancelled) return false; // Cancelled classes don't cause clashes
+    // If existing class has allowedClash flag, don't report as clash
+    // (user already allowed this class to overlap with others)
+    if (c.allowedClash) return false;
     // Check by date if available, otherwise fall back to day name
     const sameDay = newClass.date ? c.date === newClass.date : c.day === newClass.day;
     return sameDay && timesOverlap(newClass, c);
+  });
+}
+
+// Mark all existing classes that clash with the new class as having allowed clashes
+function markClashingClassesAsAllowed(newClass, excludeIndex = null) {
+  classes.forEach((c, i) => {
+    if (excludeIndex !== null && i === excludeIndex) return;
+    if (c.cancelled) return;
+    const sameDay = newClass.date ? c.date === newClass.date : c.day === newClass.day;
+    if (sameDay && timesOverlap(newClass, c)) {
+      c.allowedClash = true;
+    }
   });
 }
 
