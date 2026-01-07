@@ -4500,75 +4500,156 @@ function generateProgressShareText(student, options) {
   return message;
 }
 
-// Convert SVG chart to image blob
+// Generate chart image from student's marks data (generates SVG independently, doesn't rely on DOM)
 async function convertChartToImage(student) {
   return new Promise((resolve, reject) => {
-    // Find the SVG element in the marks chart
-    const svgElement = document.querySelector('.marks-line-chart svg');
-    if (!svgElement) {
-      reject(new Error('No chart found'));
+    // Get marks data for this student
+    const marksNotes = progressNotes
+      .filter(n => n.category === 'marks' && n.student === student && n.marksObtained !== undefined)
+      .sort((a, b) => new Date(a.noteDate || a.createdAt) - new Date(b.noteDate || b.createdAt));
+
+    if (marksNotes.length < 2) {
+      reject(new Error('Need at least 2 test scores to generate chart'));
       return;
     }
 
-    // Clone SVG and prepare for export
-    const svgClone = svgElement.cloneNode(true);
+    // Calculate data points
+    const dataPoints = marksNotes.slice(-8).map(n => ({
+      percentage: Math.round((n.marksObtained / n.marksTotal) * 100),
+      date: new Date(n.noteDate || n.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      obtained: n.marksObtained,
+      total: n.marksTotal
+    }));
 
-    // Set explicit dimensions
-    svgClone.setAttribute('width', '560');
-    svgClone.setAttribute('height', '200');
+    const avgPercentage = Math.round(dataPoints.reduce((sum, p) => sum + p.percentage, 0) / dataPoints.length);
+    const latestPercentage = dataPoints[dataPoints.length - 1].percentage;
+    const firstPercentage = dataPoints[0].percentage;
+    const improvement = latestPercentage - firstPercentage;
+    const trendText = improvement > 0 ? `+${improvement}%` : improvement < 0 ? `${improvement}%` : '0%';
 
-    // Add white background
-    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('width', '100%');
-    rect.setAttribute('height', '100%');
-    rect.setAttribute('fill', 'white');
-    svgClone.insertBefore(rect, svgClone.firstChild);
+    // Chart dimensions
+    const width = 400;
+    const height = 220;
+    const chartWidth = 340;
+    const chartHeight = 120;
+    const chartLeft = 40;
+    const chartTop = 50;
 
-    // Add title text
-    const title = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    title.setAttribute('x', '140');
-    title.setAttribute('y', '15');
-    title.setAttribute('text-anchor', 'middle');
-    title.setAttribute('font-size', '12');
-    title.setAttribute('font-weight', 'bold');
-    title.setAttribute('fill', '#374151');
-    title.textContent = `${student}'s Performance`;
-    svgClone.appendChild(title);
+    // Generate path for line
+    const pointSpacing = chartWidth / (dataPoints.length - 1);
+    const pathPoints = dataPoints.map((point, i) => {
+      const x = chartLeft + (i * pointSpacing);
+      const y = chartTop + chartHeight - ((point.percentage / 100) * chartHeight);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
 
-    // Serialize SVG
-    const svgData = new XMLSerializer().serializeToString(svgClone);
-    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    // Generate dots
+    const dots = dataPoints.map((point, i) => {
+      const x = chartLeft + (i * pointSpacing);
+      const y = chartTop + chartHeight - ((point.percentage / 100) * chartHeight);
+      const color = point.percentage >= 80 ? '#22c55e' :
+                    point.percentage >= 60 ? '#3b82f6' :
+                    point.percentage >= 40 ? '#f59e0b' : '#ef4444';
+      return `
+        <circle cx="${x}" cy="${y}" r="6" fill="${color}" stroke="white" stroke-width="2"/>
+        <text x="${x}" y="${y - 12}" text-anchor="middle" font-size="11" fill="#374151" font-weight="bold">${point.percentage}%</text>
+      `;
+    }).join('');
+
+    // Generate x-axis labels (dates)
+    const dateLabels = dataPoints.map((point, i) => {
+      const x = chartLeft + (i * pointSpacing);
+      return `<text x="${x}" y="${chartTop + chartHeight + 18}" text-anchor="middle" font-size="9" fill="#6b7280">${point.date}</text>`;
+    }).join('');
+
+    // Build complete SVG with inline styles
+    const svgContent = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <!-- Background -->
+        <rect width="100%" height="100%" fill="white"/>
+
+        <!-- Title -->
+        <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="bold" fill="#1f2937" font-family="Arial, sans-serif">${student}'s Performance Chart</text>
+
+        <!-- Stats row -->
+        <text x="60" y="42" text-anchor="middle" font-size="10" fill="#6b7280" font-family="Arial, sans-serif">Avg: ${avgPercentage}%</text>
+        <text x="160" y="42" text-anchor="middle" font-size="10" fill="#6b7280" font-family="Arial, sans-serif">Latest: ${latestPercentage}%</text>
+        <text x="260" y="42" text-anchor="middle" font-size="10" fill="${improvement >= 0 ? '#22c55e' : '#ef4444'}" font-family="Arial, sans-serif">Trend: ${trendText}</text>
+        <text x="340" y="42" text-anchor="middle" font-size="10" fill="#6b7280" font-family="Arial, sans-serif">Tests: ${dataPoints.length}</text>
+
+        <!-- Grid lines -->
+        <line x1="${chartLeft}" y1="${chartTop + chartHeight * 0.2}" x2="${chartLeft + chartWidth}" y2="${chartTop + chartHeight * 0.2}" stroke="#22c55e" stroke-opacity="0.3" stroke-dasharray="4"/>
+        <text x="${chartLeft - 5}" y="${chartTop + chartHeight * 0.2 + 4}" text-anchor="end" font-size="8" fill="#22c55e">80%</text>
+
+        <line x1="${chartLeft}" y1="${chartTop + chartHeight * 0.4}" x2="${chartLeft + chartWidth}" y2="${chartTop + chartHeight * 0.4}" stroke="#3b82f6" stroke-opacity="0.3" stroke-dasharray="4"/>
+        <text x="${chartLeft - 5}" y="${chartTop + chartHeight * 0.4 + 4}" text-anchor="end" font-size="8" fill="#3b82f6">60%</text>
+
+        <line x1="${chartLeft}" y1="${chartTop + chartHeight * 0.6}" x2="${chartLeft + chartWidth}" y2="${chartTop + chartHeight * 0.6}" stroke="#f59e0b" stroke-opacity="0.3" stroke-dasharray="4"/>
+        <text x="${chartLeft - 5}" y="${chartTop + chartHeight * 0.6 + 4}" text-anchor="end" font-size="8" fill="#f59e0b">40%</text>
+
+        <!-- Chart area background -->
+        <rect x="${chartLeft}" y="${chartTop}" width="${chartWidth}" height="${chartHeight}" fill="#f9fafb" rx="4"/>
+
+        <!-- Line -->
+        <path d="${pathPoints}" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+        <!-- Dots and labels -->
+        ${dots}
+
+        <!-- Date labels -->
+        ${dateLabels}
+
+        <!-- Footer -->
+        <text x="${width/2}" y="${height - 8}" text-anchor="middle" font-size="9" fill="#9ca3af" font-family="Arial, sans-serif">Mindful Maths</text>
+      </svg>
+    `;
+
+    // Convert SVG to image
+    const svgBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
     const svgUrl = URL.createObjectURL(svgBlob);
 
-    // Create image and canvas
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = 560;
-      canvas.height = 200;
+      canvas.width = width * 2; // 2x for better quality
+      canvas.height = height * 2;
       const ctx = canvas.getContext('2d');
+
+      // Scale for higher resolution
+      ctx.scale(2, 2);
 
       // Fill white background
       ctx.fillStyle = 'white';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
 
       // Draw image
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(img, 0, 0, width, height);
 
       // Convert to blob
       canvas.toBlob((blob) => {
         URL.revokeObjectURL(svgUrl);
-        resolve(blob);
-      }, 'image/png');
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Failed to create image blob'));
+        }
+      }, 'image/png', 1.0);
     };
 
     img.onerror = () => {
       URL.revokeObjectURL(svgUrl);
-      reject(new Error('Failed to load chart image'));
+      reject(new Error('Failed to render chart image'));
     };
 
     img.src = svgUrl;
   });
+}
+
+// Check if student has enough marks for chart
+function studentHasChartData(student) {
+  const marksNotes = progressNotes
+    .filter(n => n.category === 'marks' && n.student === student && n.marksObtained !== undefined);
+  return marksNotes.length >= 2;
 }
 
 // Update share preview
@@ -4602,6 +4683,23 @@ function openShareProgressModal() {
   // Set student name in modal
   document.getElementById('shareStudentName').textContent = `Sharing progress for: ${student}`;
 
+  // Check if chart data is available and update checkbox accordingly
+  const chartCheckbox = document.getElementById('shareMarksChart');
+  const chartLabel = chartCheckbox?.parentElement;
+  const hasChart = studentHasChartData(student);
+
+  if (chartCheckbox && chartLabel) {
+    chartCheckbox.disabled = !hasChart;
+    chartCheckbox.checked = hasChart; // Only check if data exists
+    if (!hasChart) {
+      chartLabel.querySelector('span').textContent = 'Performance Chart (need 2+ test scores)';
+      chartLabel.style.opacity = '0.5';
+    } else {
+      chartLabel.querySelector('span').textContent = 'Performance Chart (as image)';
+      chartLabel.style.opacity = '1';
+    }
+  }
+
   // Update preview
   updateSharePreview();
 
@@ -4621,13 +4719,24 @@ async function shareViaWhatsApp() {
 
   // Get the edited message from the textarea (user may have modified it)
   const message = document.getElementById('sharePreviewContent')?.value || '';
-  const includeChart = document.getElementById('shareMarksChart')?.checked;
+  const includeChart = document.getElementById('shareMarksChart')?.checked && !document.getElementById('shareMarksChart')?.disabled;
 
-  // Try to share with chart image if selected and Web Share API supports files
-  if (includeChart && navigator.canShare) {
+  let chartBlob = null;
+
+  // Generate chart image first if needed
+  if (includeChart) {
     try {
-      const chartBlob = await convertChartToImage(student);
-      const chartFile = new File([chartBlob], `${student}_progress_chart.png`, { type: 'image/png' });
+      chartBlob = await convertChartToImage(student);
+    } catch (err) {
+      console.log('Chart generation failed:', err.message);
+      showToast('Could not generate chart - sharing text only');
+    }
+  }
+
+  // Try to share with chart image if available and Web Share API supports files
+  if (chartBlob && navigator.canShare) {
+    try {
+      const chartFile = new File([chartBlob], `${student.replace(/\s+/g, '_')}_progress_chart.png`, { type: 'image/png' });
 
       if (navigator.canShare({ files: [chartFile] })) {
         await navigator.share({
@@ -4635,11 +4744,15 @@ async function shareViaWhatsApp() {
           files: [chartFile]
         });
         closeShareProgressModal();
-        showToast('Progress shared successfully!');
+        showToast('Progress shared with chart!');
         return;
       }
     } catch (err) {
-      console.log('File sharing not supported, falling back to text only');
+      // User cancelled or share failed - continue to fallback
+      if (err.name === 'AbortError') {
+        return; // User cancelled, don't do anything else
+      }
+      console.log('Native share failed, falling back to WhatsApp + download');
     }
   }
 
@@ -4648,22 +4761,17 @@ async function shareViaWhatsApp() {
   const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
   window.open(whatsappUrl, '_blank');
 
-  // If chart was selected, offer to download it separately
-  if (includeChart) {
-    try {
-      const chartBlob = await convertChartToImage(student);
-      const url = URL.createObjectURL(chartBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${student}_progress_chart.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast('WhatsApp opened + Chart downloaded');
-    } catch (err) {
-      showToast('WhatsApp opened');
-    }
+  // If chart was generated, download it separately
+  if (chartBlob) {
+    const url = URL.createObjectURL(chartBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${student.replace(/\s+/g, '_')}_progress_chart.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('WhatsApp opened + Chart image downloaded!');
   } else {
     showToast('WhatsApp opened');
   }
