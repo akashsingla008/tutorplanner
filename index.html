@@ -224,7 +224,10 @@
         <option value="">-- All Students --</option>
       </select>
     </div>
-    <button id="addNoteBtn" class="btn btn-primary btn-sm">+ Add Note</button>
+    <div class="progress-header-buttons">
+      <button id="shareProgressBtn" class="btn btn-secondary btn-sm" disabled>Share</button>
+      <button id="addNoteBtn" class="btn btn-primary btn-sm">+ Add Note</button>
+    </div>
   </div>
 
   <div class="progress-filters">
@@ -305,6 +308,61 @@
         <button type="submit" id="saveNoteBtn" class="btn btn-primary">Save Note</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Share Progress Modal -->
+<div id="shareProgressModal" class="modal hidden">
+  <div class="modal-content share-progress-modal-content">
+    <div class="modal-header">
+      <h2>Share Progress</h2>
+      <button id="closeShareProgressModal" class="close-btn">&times;</button>
+    </div>
+
+    <div class="share-progress-body">
+      <p class="share-student-name" id="shareStudentName"></p>
+
+      <div class="share-options">
+        <label class="share-option">
+          <input type="checkbox" id="shareMarksChart" checked />
+          <span>Performance Chart (as image)</span>
+        </label>
+        <label class="share-option">
+          <input type="checkbox" id="shareMarksSummary" checked />
+          <span>Marks Summary (avg, best, trend)</span>
+        </label>
+        <label class="share-option">
+          <input type="checkbox" id="shareRecentMarks" checked />
+          <span>Recent Test Scores</span>
+        </label>
+        <label class="share-option">
+          <input type="checkbox" id="shareHomework" />
+          <span>Homework Notes</span>
+        </label>
+        <label class="share-option">
+          <input type="checkbox" id="shareExamDates" />
+          <span>Exam / Important Dates</span>
+        </label>
+        <label class="share-option">
+          <input type="checkbox" id="shareProgressNotes" />
+          <span>Progress Notes</span>
+        </label>
+      </div>
+
+      <div class="share-preview" id="sharePreview">
+        <div class="share-preview-header">Preview</div>
+        <div class="share-preview-content" id="sharePreviewContent"></div>
+      </div>
+
+      <div class="share-actions">
+        <button type="button" id="shareViaWhatsApp" class="btn btn-success">
+          <span>Share via WhatsApp</span>
+        </button>
+        <button type="button" id="copyShareText" class="btn btn-secondary">
+          <span>Copy Text</span>
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 

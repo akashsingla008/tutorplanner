@@ -4160,6 +4160,119 @@ header .subtitle {
   max-width: 250px;
 }
 
+.progress-header-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#shareProgressBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Share Progress Modal */
+.share-progress-modal-content {
+  max-width: 450px;
+}
+
+.share-progress-body {
+  padding: 4px 0;
+}
+
+.share-student-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.share-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.share-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.share-option:hover {
+  background: #f3f4f6;
+}
+
+.share-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #3b82f6;
+}
+
+.share-option span {
+  font-size: 14px;
+  color: #374151;
+}
+
+.share-preview {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.share-preview-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 8px 12px;
+  background: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+}
+
+.share-preview-content {
+  padding: 12px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  font-family: inherit;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.share-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.share-actions .btn {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-success {
+  background: #22c55e;
+  color: white;
+  border: none;
+}
+
+.btn-success:hover {
+  background: #16a34a;
+}
+
 /* Category Filters */
 .progress-filters {
   display: flex;

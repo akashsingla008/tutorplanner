@@ -4389,6 +4389,334 @@ function updateNoteDateFieldVisibility(category) {
   }
 }
 
+// ==================== SHARE PROGRESS FUNCTIONS ====================
+
+// Generate shareable text for student progress
+function generateProgressShareText(student, options) {
+  const now = new Date();
+  const monthYear = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+  let message = `*${student}'s Progress Report*\n`;
+  message += `Mindful Maths - ${monthYear}\n`;
+
+  // Get marks data for this student
+  const marksNotes = progressNotes
+    .filter(n => n.category === 'marks' && n.student === student && n.marksObtained !== undefined)
+    .sort((a, b) => new Date(a.noteDate || a.createdAt) - new Date(b.noteDate || b.createdAt));
+
+  // Marks Summary
+  if (options.marksSummary && marksNotes.length >= 1) {
+    const dataPoints = marksNotes.slice(-8).map(n => ({
+      percentage: Math.round((n.marksObtained / n.marksTotal) * 100),
+      obtained: n.marksObtained,
+      total: n.marksTotal
+    }));
+
+    const latestPercentage = dataPoints[dataPoints.length - 1].percentage;
+    const avgPercentage = Math.round(dataPoints.reduce((sum, p) => sum + p.percentage, 0) / dataPoints.length);
+    const bestPercentage = Math.max(...dataPoints.map(p => p.percentage));
+
+    let trendText = '';
+    if (dataPoints.length >= 2) {
+      const firstPercentage = dataPoints[0].percentage;
+      const improvement = latestPercentage - firstPercentage;
+      if (improvement > 0) trendText = `Improving (+${improvement}%)`;
+      else if (improvement < 0) trendText = `Needs attention (${improvement}%)`;
+      else trendText = 'Stable';
+    }
+
+    message += `\n*Performance Summary*\n`;
+    message += `Average: ${avgPercentage}%\n`;
+    message += `Best Score: ${bestPercentage}%\n`;
+    message += `Latest: ${latestPercentage}%\n`;
+    if (trendText) message += `Trend: ${trendText}\n`;
+  }
+
+  // Recent Marks
+  if (options.recentMarks && marksNotes.length >= 1) {
+    const recentMarks = marksNotes.slice(-5).reverse();
+    message += `\n*Recent Tests*\n`;
+    recentMarks.forEach(n => {
+      const date = new Date(n.noteDate || n.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      const percentage = Math.round((n.marksObtained / n.marksTotal) * 100);
+      message += `- ${date}: ${n.marksObtained}/${n.marksTotal} (${percentage}%)\n`;
+    });
+  }
+
+  // Homework Notes
+  if (options.homework) {
+    const homeworkNotes = progressNotes
+      .filter(n => n.category === 'homework' && n.student === student)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 3);
+
+    if (homeworkNotes.length > 0) {
+      message += `\n*Homework*\n`;
+      homeworkNotes.forEach(n => {
+        message += `- ${n.content}\n`;
+      });
+    }
+  }
+
+  // Exam / Important Dates
+  if (options.examDates) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const upcomingDates = progressNotes
+      .filter(n => (n.category === 'exam' || n.category === 'dates') && n.student === student && n.noteDate)
+      .filter(n => new Date(n.noteDate) >= today)
+      .sort((a, b) => new Date(a.noteDate) - new Date(b.noteDate))
+      .slice(0, 3);
+
+    if (upcomingDates.length > 0) {
+      message += `\n*Upcoming*\n`;
+      upcomingDates.forEach(n => {
+        const date = new Date(n.noteDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        const daysLeft = Math.ceil((new Date(n.noteDate) - today) / (1000 * 60 * 60 * 24));
+        const daysText = daysLeft === 0 ? 'Today!' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft} days left`;
+        message += `- ${n.content}: ${date} (${daysText})\n`;
+      });
+    }
+  }
+
+  // Progress Notes
+  if (options.progressNotes) {
+    const progNotes = progressNotes
+      .filter(n => n.category === 'progress' && n.student === student)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 2);
+
+    if (progNotes.length > 0) {
+      message += `\n*Progress Notes*\n`;
+      progNotes.forEach(n => {
+        message += `- ${n.content}\n`;
+      });
+    }
+  }
+
+  message += `\nKeep up the great work!`;
+
+  return message;
+}
+
+// Convert SVG chart to image blob
+async function convertChartToImage(student) {
+  return new Promise((resolve, reject) => {
+    // Find the SVG element in the marks chart
+    const svgElement = document.querySelector('.marks-line-chart svg');
+    if (!svgElement) {
+      reject(new Error('No chart found'));
+      return;
+    }
+
+    // Clone SVG and prepare for export
+    const svgClone = svgElement.cloneNode(true);
+
+    // Set explicit dimensions
+    svgClone.setAttribute('width', '560');
+    svgClone.setAttribute('height', '200');
+
+    // Add white background
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('width', '100%');
+    rect.setAttribute('height', '100%');
+    rect.setAttribute('fill', 'white');
+    svgClone.insertBefore(rect, svgClone.firstChild);
+
+    // Add title text
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    title.setAttribute('x', '140');
+    title.setAttribute('y', '15');
+    title.setAttribute('text-anchor', 'middle');
+    title.setAttribute('font-size', '12');
+    title.setAttribute('font-weight', 'bold');
+    title.setAttribute('fill', '#374151');
+    title.textContent = `${student}'s Performance`;
+    svgClone.appendChild(title);
+
+    // Serialize SVG
+    const svgData = new XMLSerializer().serializeToString(svgClone);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+
+    // Create image and canvas
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 560;
+      canvas.height = 200;
+      const ctx = canvas.getContext('2d');
+
+      // Fill white background
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw image
+      ctx.drawImage(img, 0, 0);
+
+      // Convert to blob
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(svgUrl);
+        resolve(blob);
+      }, 'image/png');
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(svgUrl);
+      reject(new Error('Failed to load chart image'));
+    };
+
+    img.src = svgUrl;
+  });
+}
+
+// Update share preview
+function updateSharePreview() {
+  const student = document.getElementById('progressStudentSelect')?.value;
+  const previewContent = document.getElementById('sharePreviewContent');
+
+  if (!student || !previewContent) return;
+
+  const options = {
+    marksChart: document.getElementById('shareMarksChart')?.checked,
+    marksSummary: document.getElementById('shareMarksSummary')?.checked,
+    recentMarks: document.getElementById('shareRecentMarks')?.checked,
+    homework: document.getElementById('shareHomework')?.checked,
+    examDates: document.getElementById('shareExamDates')?.checked,
+    progressNotes: document.getElementById('shareProgressNotes')?.checked
+  };
+
+  const message = generateProgressShareText(student, options);
+  previewContent.textContent = message;
+}
+
+// Open share progress modal
+function openShareProgressModal() {
+  const student = document.getElementById('progressStudentSelect')?.value;
+  if (!student) {
+    showToast('Please select a student first');
+    return;
+  }
+
+  // Set student name in modal
+  document.getElementById('shareStudentName').textContent = `Sharing progress for: ${student}`;
+
+  // Update preview
+  updateSharePreview();
+
+  // Show modal
+  document.getElementById('shareProgressModal').classList.remove('hidden');
+}
+
+// Close share progress modal
+function closeShareProgressModal() {
+  document.getElementById('shareProgressModal').classList.add('hidden');
+}
+
+// Share via WhatsApp
+async function shareViaWhatsApp() {
+  const student = document.getElementById('progressStudentSelect')?.value;
+  if (!student) return;
+
+  const options = {
+    marksChart: document.getElementById('shareMarksChart')?.checked,
+    marksSummary: document.getElementById('shareMarksSummary')?.checked,
+    recentMarks: document.getElementById('shareRecentMarks')?.checked,
+    homework: document.getElementById('shareHomework')?.checked,
+    examDates: document.getElementById('shareExamDates')?.checked,
+    progressNotes: document.getElementById('shareProgressNotes')?.checked
+  };
+
+  const message = generateProgressShareText(student, options);
+
+  // Try to share with chart image if selected and Web Share API supports files
+  if (options.marksChart && navigator.canShare) {
+    try {
+      const chartBlob = await convertChartToImage(student);
+      const chartFile = new File([chartBlob], `${student}_progress_chart.png`, { type: 'image/png' });
+
+      if (navigator.canShare({ files: [chartFile] })) {
+        await navigator.share({
+          text: message,
+          files: [chartFile]
+        });
+        closeShareProgressModal();
+        showToast('Progress shared successfully!');
+        return;
+      }
+    } catch (err) {
+      console.log('File sharing not supported, falling back to text only');
+    }
+  }
+
+  // Fallback: Open WhatsApp with text
+  const encodedMessage = encodeURIComponent(message);
+  const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+  window.open(whatsappUrl, '_blank');
+
+  // If chart was selected, offer to download it separately
+  if (options.marksChart) {
+    try {
+      const chartBlob = await convertChartToImage(student);
+      const url = URL.createObjectURL(chartBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${student}_progress_chart.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('WhatsApp opened + Chart downloaded');
+    } catch (err) {
+      showToast('WhatsApp opened');
+    }
+  } else {
+    showToast('WhatsApp opened');
+  }
+
+  closeShareProgressModal();
+}
+
+// Copy share text to clipboard
+async function copyShareText() {
+  const student = document.getElementById('progressStudentSelect')?.value;
+  if (!student) return;
+
+  const options = {
+    marksSummary: document.getElementById('shareMarksSummary')?.checked,
+    recentMarks: document.getElementById('shareRecentMarks')?.checked,
+    homework: document.getElementById('shareHomework')?.checked,
+    examDates: document.getElementById('shareExamDates')?.checked,
+    progressNotes: document.getElementById('shareProgressNotes')?.checked
+  };
+
+  const message = generateProgressShareText(student, options);
+
+  try {
+    await navigator.clipboard.writeText(message);
+    showToast('Progress report copied to clipboard!');
+  } catch (err) {
+    // Fallback for older browsers
+    const textarea = document.createElement('textarea');
+    textarea.value = message;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    showToast('Progress report copied to clipboard!');
+  }
+}
+
+// Update share button state based on student selection
+function updateShareButtonState() {
+  const student = document.getElementById('progressStudentSelect')?.value;
+  const shareBtn = document.getElementById('shareProgressBtn');
+  if (shareBtn) {
+    shareBtn.disabled = !student;
+  }
+}
+
 // Initialize progress view event listeners
 function initProgressView() {
   // Add note button
@@ -4430,8 +4758,29 @@ function initProgressView() {
     });
   });
 
-  // Student filter
-  document.getElementById('progressStudentSelect')?.addEventListener('change', renderProgressNotes);
+  // Student filter - also update share button state
+  document.getElementById('progressStudentSelect')?.addEventListener('change', () => {
+    renderProgressNotes();
+    updateShareButtonState();
+  });
+
+  // Share progress button
+  document.getElementById('shareProgressBtn')?.addEventListener('click', openShareProgressModal);
+
+  // Close share modal
+  document.getElementById('closeShareProgressModal')?.addEventListener('click', closeShareProgressModal);
+  document.getElementById('shareProgressModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'shareProgressModal') closeShareProgressModal();
+  });
+
+  // Share action buttons
+  document.getElementById('shareViaWhatsApp')?.addEventListener('click', shareViaWhatsApp);
+  document.getElementById('copyShareText')?.addEventListener('click', copyShareText);
+
+  // Update preview when options change
+  document.querySelectorAll('#shareProgressModal input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', updateSharePreview);
+  });
 }
 
 // ==================== BACKUP FUNCTIONS ====================
