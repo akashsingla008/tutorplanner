@@ -1276,12 +1276,21 @@ function timesOverlap(a, b) {
   return a.start < b.end && b.start < a.end;
 }
 
-// Check for clashes and show/hide warning banner
+// Check for clashes and show/hide warning banner (for current week only)
 function checkForClashes() {
   let hasClashFlag = false;
 
-  DAYS.forEach(day => {
-    const dayClasses = classes.filter(c => c.day === day && !c.cancelled);
+  // Get the current week's date range
+  const weekStart = getWeekStartDate(currentWeekOffset);
+
+  DAYS.forEach((day, dayIndex) => {
+    // Calculate the date for this day in current week
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + dayIndex);
+    const dateStr = formatDateToYYYYMMDD(date);
+
+    // Filter by specific date (not day name) to match renderWeekGrid behavior
+    const dayClasses = classes.filter(c => c.date === dateStr && !c.cancelled);
 
     // Check each pair for unexpected clashes
     for (let i = 0; i < dayClasses.length; i++) {
