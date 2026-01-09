@@ -1940,9 +1940,6 @@ function hasClash(newClass, excludeIndex = null) {
   return classes.some((c, i) => {
     if (excludeIndex !== null && i === excludeIndex) return false;
     if (c.cancelled) return false; // Cancelled classes don't cause clashes
-    // If existing class has allowedClash flag, don't report as clash
-    // (user already allowed this class to overlap with others)
-    if (c.allowedClash) return false;
     // Check by date if available, otherwise fall back to day name
     const sameDay = newClass.date ? c.date === newClass.date : c.day === newClass.day;
     return sameDay && timesOverlap(newClass, c);
