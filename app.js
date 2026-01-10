@@ -384,9 +384,8 @@ function applyAdvanceCreditsToCompletedClasses() {
   completedUnpaidClasses.forEach(c => {
     const classId = getClassPaymentId(c);
     const rate = studentRates[c.student] || defaultRate;
-    // Use actual minutes for partial classes, scheduled minutes otherwise
-    const scheduledMinutes = getMinutesBetween(c.start, c.end);
-    const minutes = c.partialClass ? (c.actualMinutes || 0) : scheduledMinutes;
+    // Always use scheduled minutes for payment (partial classes still charged full amount)
+    const minutes = getMinutesBetween(c.start, c.end);
     const classCost = Math.round((minutes / 60) * rate);
     const currentCredit = advanceCredits[c.student] || 0;
 
@@ -420,9 +419,8 @@ function calculateCreditUsedPerStudent() {
     const classId = getClassPaymentId(c);
     if (paymentStatus[classId] === 'credit') {
       const rate = studentRates[c.student] || defaultRate;
-      // Use actual minutes for partial classes, scheduled minutes otherwise
-      const scheduledMinutes = getMinutesBetween(c.start, c.end);
-      const minutes = c.partialClass ? (c.actualMinutes || 0) : scheduledMinutes;
+      // Always use scheduled minutes for payment (partial classes still charged full amount)
+      const minutes = getMinutesBetween(c.start, c.end);
       const classCost = Math.round((minutes / 60) * rate);
 
       if (!creditUsed[c.student]) {
@@ -2289,10 +2287,8 @@ function renderReport() {
     if (!c.cancelled && !c.pendingConfirmation) {
       if (isClassCompleted(c)) {
         completedCount++;
-        // Use actual minutes for partial classes, scheduled minutes otherwise
-        const scheduledMins = getMinutesBetween(c.start, c.end);
-        const actualMins = c.partialClass ? (c.actualMinutes || 0) : scheduledMins;
-        completedMinutes += actualMins;
+        // Always use scheduled minutes for hours/payment (partial classes still count full time)
+        completedMinutes += getMinutesBetween(c.start, c.end);
       } else {
         upcomingCount++;
       }
@@ -2342,7 +2338,6 @@ function renderReport() {
     // Track class details for actions
     const classId = getClassPaymentId(c);
     const scheduledMinutes = getMinutesBetween(c.start, c.end);
-    const actualMinutes = c.partialClass ? (c.actualMinutes || 0) : scheduledMinutes;
 
     studentStats[c.student].classDetails.push({
       classId,
@@ -2351,7 +2346,7 @@ function renderReport() {
       start: c.start,
       end: c.end,
       scheduledMinutes,
-      actualMinutes,
+      actualMinutes: c.partialClass ? (c.actualMinutes || 0) : scheduledMinutes,
       isPartial: c.partialClass || false,
       partialReason: c.partialReason,
       pendingMinutes: c.pendingMinutes || 0,
@@ -2362,7 +2357,7 @@ function renderReport() {
       isCompleted: !c.cancelled && !c.pendingConfirmation && isClassCompleted(c)
     });
 
-    // Track pending time owed from partial classes
+    // Track pending time owed from partial classes (for display only, not payment)
     if (c.partialClass && c.pendingMinutes > 0) {
       studentStats[c.student].pendingTimeOwed += c.pendingMinutes;
     }
@@ -2372,17 +2367,17 @@ function renderReport() {
     } else if (c.pendingConfirmation) {
       studentStats[c.student].pending++;
     } else {
-      // Check if class is completed or upcoming
-      const minutes = c.partialClass ? actualMinutes : scheduledMinutes; // Use actual for partial
+      // Always use scheduled minutes for payment calculations
+      // Partial classes are still charged full amount - time owed is tracked separately
       if (isClassCompleted(c)) {
         studentStats[c.student].completed++;
-        studentStats[c.student].completedMinutes += minutes;
+        studentStats[c.student].completedMinutes += scheduledMinutes;
         studentStats[c.student].completedClassIds.push(classId);
         // Check if this class is paid (either manually or auto-applied from credit)
         const isPaid = paymentStatus[classId];
         if (isPaid) {
           studentStats[c.student].paidClasses++;
-          studentStats[c.student].paidMinutes += minutes;
+          studentStats[c.student].paidMinutes += scheduledMinutes;
           // Track if paid from credit
           if (isPaid === 'credit') {
             if (!studentStats[c.student].creditPaidClasses) {
@@ -2393,12 +2388,12 @@ function renderReport() {
         }
       } else {
         studentStats[c.student].upcoming++;
-        studentStats[c.student].upcomingMinutes += minutes;
+        studentStats[c.student].upcomingMinutes += scheduledMinutes;
         studentStats[c.student].upcomingClassIds.push(classId);
         // Check if this upcoming class has advance payment
         if (paymentStatus[classId]) {
           studentStats[c.student].advancePaidClasses++;
-          studentStats[c.student].advancePaidMinutes += minutes;
+          studentStats[c.student].advancePaidMinutes += scheduledMinutes;
         }
       }
     }
@@ -3031,9 +3026,8 @@ function renderEarningsChart(classesInRange, _studentStats, isClassCompleted) {
     }
 
     const rate = studentRates[cls.student] || defaultRate;
-    // Use actual minutes for partial classes, scheduled minutes otherwise
-    const scheduledMinutes = getMinutesBetween(cls.start, cls.end);
-    const minutes = cls.partialClass ? (cls.actualMinutes || 0) : scheduledMinutes;
+    // Always use scheduled minutes for payment (partial classes still charged full amount)
+    const minutes = getMinutesBetween(cls.start, cls.end);
     const amount = Math.round((minutes / 60) * rate);
 
     if (cls.pendingConfirmation) {
@@ -3158,9 +3152,8 @@ function showChartDayDetails(day, paid, completed, upcoming, classesInRange, isC
 
   dayClasses.sort((a, b) => a.start.localeCompare(b.start)).forEach(cls => {
     const rate = studentRates[cls.student] || defaultRate;
-    // Use actual minutes for partial classes, scheduled minutes otherwise
-    const scheduledMinutes = getMinutesBetween(cls.start, cls.end);
-    const minutes = cls.partialClass ? (cls.actualMinutes || 0) : scheduledMinutes;
+    // Always use scheduled minutes for payment (partial classes still charged full amount)
+    const minutes = getMinutesBetween(cls.start, cls.end);
     const amount = Math.round((minutes / 60) * rate);
 
     let status = 'upcoming';
@@ -3226,11 +3219,12 @@ function showMarkPaidDialog(student, classIds) {
     const paidFromCredit = payStatus === 'credit';
     const rate = studentRates[student] || defaultRate;
 
-    // Find the actual class object to check for partial status
-    const actualClass = classes.find(c => getClassPaymentId(c) === classId);
-    const scheduledMinutes = getMinutesBetween(start, end);
-    const minutes = actualClass?.partialClass ? (actualClass.actualMinutes || 0) : scheduledMinutes;
+    // Always use scheduled minutes for payment (partial classes still charged full amount)
+    const minutes = getMinutesBetween(start, end);
     const amount = Math.round((minutes / 60) * rate);
+
+    // Find the actual class object to check for partial status (for display only)
+    const actualClass = classes.find(c => getClassPaymentId(c) === classId);
 
     // Format date nicely
     const dateObj = new Date(date + 'T00:00:00');
@@ -3335,10 +3329,8 @@ function showAdvancePaymentDialog(student, classIds) {
     const isPaid = paymentStatus[classId] || false;
     const rate = studentRates[student] || defaultRate;
 
-    // Find the actual class object to check for partial status
-    const actualClass = classes.find(c => getClassPaymentId(c) === classId);
-    const scheduledMinutes = getMinutesBetween(start, end);
-    const minutes = actualClass?.partialClass ? (actualClass.actualMinutes || 0) : scheduledMinutes;
+    // Always use scheduled minutes for payment (partial classes still charged full amount)
+    const minutes = getMinutesBetween(start, end);
     const amount = Math.round((minutes / 60) * rate);
 
     // Format date nicely
