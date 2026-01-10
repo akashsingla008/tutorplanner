@@ -1494,8 +1494,30 @@ header .subtitle {
   color: #6b7280;
 }
 
+.time-owed-student-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.time-owed-complete-btn-small {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.time-owed-complete-btn-small:hover {
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  transform: translateY(-1px);
+}
+
 .time-owed-details-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
   color: white;
   border: none;
   padding: 5px 12px;
@@ -1506,7 +1528,7 @@ header .subtitle {
 }
 
 .time-owed-details-btn:hover {
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 2px 8px rgba(107, 114, 128, 0.4);
   transform: translateY(-1px);
 }
 
@@ -1634,10 +1656,27 @@ header .subtitle {
   border-top: 1px solid #e5e7eb;
   display: flex;
   justify-content: flex-end;
+  gap: 12px;
+}
+
+.time-owed-complete-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.time-owed-complete-btn:hover {
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  transform: translateY(-1px);
 }
 
 .time-owed-dialog-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
   color: white;
   border: none;
   padding: 10px 24px;
@@ -1648,7 +1687,7 @@ header .subtitle {
 }
 
 .time-owed-dialog-btn:hover {
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
   transform: translateY(-1px);
 }
 

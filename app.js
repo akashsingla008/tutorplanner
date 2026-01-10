@@ -2911,11 +2911,27 @@ function updateTimeOwedSummary() {
           <span class="time-owed-amount">${formatTimeOwed(s.totalMinutes)}</span>
           <span class="time-owed-classes">(${s.partialClasses.length} partial class${s.partialClasses.length !== 1 ? 'es' : ''})</span>
         </div>
-        <button class="time-owed-details-btn" data-student="${escapeHtml(s.student)}" title="View details">
-          Details
-        </button>
+        <div class="time-owed-student-actions">
+          <button class="time-owed-complete-btn-small" data-student="${escapeHtml(s.student)}" data-minutes="${s.totalMinutes}" title="Mark time owed as complete">
+            Done
+          </button>
+          <button class="time-owed-details-btn" data-student="${escapeHtml(s.student)}" title="View details">
+            Details
+          </button>
+        </div>
       </div>
     `).join('');
+
+    // Add event listeners to complete buttons
+    studentListEl.querySelectorAll('.time-owed-complete-btn-small').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const student = btn.dataset.student;
+        const minutes = parseInt(btn.dataset.minutes, 10);
+        if (confirm(`Mark all pending time for ${student} as complete?\n\nThis will clear ${formatTimeOwed(minutes)} of owed time.`)) {
+          markTimeOwedComplete(student);
+        }
+      });
+    });
 
     // Add event listeners to details buttons
     studentListEl.querySelectorAll('.time-owed-details-btn').forEach(btn => {
@@ -2974,6 +2990,7 @@ function showTimeOwedDetails(studentData) {
         `).join('')}
       </div>
       <div class="time-owed-dialog-footer">
+        <button class="time-owed-complete-btn" data-student="${escapeHtml(studentData.student)}">Mark All Complete</button>
         <button class="time-owed-dialog-btn">Close</button>
       </div>
     </div>
@@ -2988,6 +3005,33 @@ function showTimeOwedDetails(studentData) {
   dialog.addEventListener('click', (e) => {
     if (e.target === dialog) closeDialog();
   });
+
+  // Mark complete handler
+  dialog.querySelector('.time-owed-complete-btn').addEventListener('click', () => {
+    const student = studentData.student;
+    if (confirm(`Mark all pending time for ${student} as complete?\n\nThis will clear ${formatTimeOwed(studentData.totalMinutes)} of owed time.`)) {
+      markTimeOwedComplete(student);
+      closeDialog();
+    }
+  });
+}
+
+// Mark all time owed for a student as complete (clears pending minutes from their partial classes)
+function markTimeOwedComplete(student) {
+  let updated = false;
+  classes.forEach(cls => {
+    if (cls.student === student && cls.partialClass && cls.pendingMinutes > 0) {
+      cls.pendingMinutes = 0;
+      updated = true;
+    }
+  });
+
+  if (updated) {
+    saveClasses();
+    renderReport();
+    renderWeekGrid();
+    showToast(`Time owed for ${student} marked as complete`);
+  }
 }
 
 // Format date short (e.g., "Jan 5")
