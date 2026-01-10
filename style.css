@@ -731,6 +731,24 @@ header .subtitle {
   min-width: 120px;
 }
 
+.student-time-owed-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.student-time-owed-badge .time-owed-icon {
+  font-size: 1rem;
+}
+
 /* Quick Time Slots */
 .quick-slots {
   display: flex;

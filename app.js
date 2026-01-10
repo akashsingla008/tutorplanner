@@ -504,12 +504,14 @@ function setupEventListeners() {
     if (existingStudentSelect.value) {
       studentNameInput.value = "";
     }
+    updateStudentTimeOwedBadge();
   });
 
   studentNameInput.addEventListener("input", () => {
     if (studentNameInput.value) {
       existingStudentSelect.value = "";
     }
+    updateStudentTimeOwedBadge();
   });
 
   // Quick time slots
@@ -1380,6 +1382,7 @@ function openEditModal(index) {
     existingStudentSelect.value = "";
     studentNameInput.value = cls.student;
   }
+  updateStudentTimeOwedBadge();
 
   daySelect.value = cls.day;
   startTimeInput.value = cls.start;
@@ -1446,6 +1449,10 @@ function resetFormUI() {
     cb.checked = false;
     cb.closest(".day-checkbox").classList.remove("has-clash");
   });
+
+  // Hide time owed badge
+  const badge = document.getElementById('studentTimeOwedBadge');
+  if (badge) badge.style.display = 'none';
 }
 
 // Update quick slots to show which ones have clashes
@@ -1912,6 +1919,7 @@ function handleDuplicate() {
       existingStudentSelect.value = "";
       studentNameInput.value = originalClass.student;
     }
+    updateStudentTimeOwedBadge();
 
     daySelect.value = originalClass.day;
     startTimeInput.value = originalClass.start;
@@ -3031,6 +3039,37 @@ function markTimeOwedComplete(student) {
     renderReport();
     renderWeekGrid();
     showToast(`Time owed for ${student} marked as complete`);
+  }
+}
+
+// Update time owed badge in class form when student is selected
+function updateStudentTimeOwedBadge() {
+  const badge = document.getElementById('studentTimeOwedBadge');
+  if (!badge) return;
+
+  const studentName = existingStudentSelect.value || studentNameInput.value.trim();
+
+  if (!studentName) {
+    badge.style.display = 'none';
+    return;
+  }
+
+  // Calculate pending time for this student
+  let totalPendingMinutes = 0;
+  let partialClassCount = 0;
+
+  classes.forEach(cls => {
+    if (cls.student === studentName && cls.partialClass && cls.pendingMinutes > 0) {
+      totalPendingMinutes += cls.pendingMinutes;
+      partialClassCount++;
+    }
+  });
+
+  if (totalPendingMinutes > 0) {
+    badge.innerHTML = `<span class="time-owed-icon">⏱️</span> ${formatTimeOwed(totalPendingMinutes)} owed (${partialClassCount} partial class${partialClassCount !== 1 ? 'es' : ''})`;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
   }
 }
 
