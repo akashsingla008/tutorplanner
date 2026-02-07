@@ -2818,11 +2818,25 @@ function updateCreditSummaryCard() {
             <span class="credit-detail exhausted-label">Credit exhausted</span>
           ` : ''}
         </div>
-        <button class="credit-edit-btn" data-student="${escapeHtml(s.student)}" title="Edit credit">
-          Edit
-        </button>
+        <div class="credit-student-actions">
+          <button class="credit-share-btn" data-student="${escapeHtml(s.student)}" title="Share classes summary via WhatsApp">
+            Share
+          </button>
+          <button class="credit-edit-btn" data-student="${escapeHtml(s.student)}" title="Edit credit">
+            Edit
+          </button>
+        </div>
       </div>
     `).join('');
+
+    // Add event listeners to share buttons
+    studentListEl.querySelectorAll('.credit-share-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const student = btn.dataset.student;
+        const data = studentCredits.find(s => s.student === student);
+        if (data) shareAdvanceCreditSummary(data);
+      });
+    });
 
     // Add event listeners to edit buttons
     studentListEl.querySelectorAll('.credit-edit-btn').forEach(btn => {
@@ -2834,6 +2848,57 @@ function updateCreditSummaryCard() {
   } else {
     creditSection.style.display = 'none';
   }
+}
+
+// Share advance credit summary for a student via WhatsApp
+function shareAdvanceCreditSummary(studentData) {
+  const student = studentData.student;
+  const rate = studentData.rate;
+
+  // Get all credit-paid classes for this student, sorted by date
+  const creditClasses = classes
+    .filter(c => {
+      if (c.cancelled || c.pendingConfirmation) return false;
+      const classId = getClassPaymentId(c);
+      return c.student === student && paymentStatus[classId] === 'credit';
+    })
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // Format date nicely: "5 Jan (Mon) 3:30-4:30 PM"
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const classLines = creditClasses.map((c, i) => {
+    const d = new Date(c.date + 'T12:00:00');
+    const dateStr = `${d.getDate()} ${months[d.getMonth()]} (${days[d.getDay()]})`;
+    return `${i + 1}. ${dateStr} - ${formatTime(c.start)} to ${formatTime(c.end)}`;
+  });
+
+  // Calculate totals
+  const totalOriginal = studentData.creditUsed + studentData.creditRemaining;
+  const totalClasses = rate > 0 ? Math.round(totalOriginal / rate) : 0;
+  const classesCompleted = creditClasses.length;
+
+  // Build message
+  let message = `*Mindful Maths - Class Summary*\n`;
+  message += `*Student:* ${student}\n`;
+  message += `*Rate:* ₹${rate.toLocaleString()}/hr\n\n`;
+
+  message += `*Advance Payment:* ₹${totalOriginal.toLocaleString()} (${totalClasses} classes)\n`;
+  message += `*Classes Completed:* ${classesCompleted}\n`;
+  message += `*Amount Used:* ₹${studentData.creditUsed.toLocaleString()}\n`;
+  message += `*Balance:* ₹${studentData.creditRemaining.toLocaleString()} (${studentData.freeClasses} classes pending)\n\n`;
+
+  if (classLines.length > 0) {
+    message += `*Classes Completed (from advance):*\n`;
+    message += classLines.join('\n');
+  } else {
+    message += `No classes completed from advance payment yet.`;
+  }
+
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  window.open(whatsappUrl, '_blank');
+  showToast(`WhatsApp opened for ${student}`);
 }
 
 // Update time owed summary section with per-student breakdown of pending time from partial classes

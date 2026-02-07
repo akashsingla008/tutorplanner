@@ -1408,6 +1408,28 @@ header .subtitle {
   background: #f3f4f6;
 }
 
+.credit-student-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.credit-share-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.credit-share-btn:hover {
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  transform: translateY(-1px);
+}
+
 .credit-edit-btn {
   background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
   color: white;
