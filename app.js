@@ -55,6 +55,7 @@ let studentRates = safeJsonParse('studentRates', {});
 let paymentStatus = safeJsonParse('paymentStatus', {});
 let advanceCredits = safeJsonParse('advanceCredits', {}); // Track advance payment credits per student
 let progressNotes = safeJsonParse('progressNotes', []); // Track student progress notes
+let deletedStudents = safeJsonParse('deletedStudents', []); // Students removed from active scheduling
 let editingNoteId = null; // Track which note is being edited
 let currentNoteCategory = 'all'; // Current filter category for progress view
 let isSelectMode = false;
@@ -171,6 +172,7 @@ function checkAndRecoverData() {
     paymentStatus = backup.paymentStatus || paymentStatus;
     advanceCredits = backup.advanceCredits || advanceCredits;
     progressNotes = backup.progressNotes || progressNotes;
+    deletedStudents = backup.deletedStudents || deletedStudents;
     defaultRate = backup.defaultRate || defaultRate;
     if (backup.achievements) {
       achievements = backup.achievements;
@@ -182,6 +184,7 @@ function checkAndRecoverData() {
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
+    localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
     localStorage.setItem('defaultRate', defaultRate);
     localStorage.setItem('achievements', JSON.stringify(achievements));
 
@@ -198,6 +201,7 @@ function checkAndRecoverData() {
     paymentStatus = backup.paymentStatus || paymentStatus;
     advanceCredits = backup.advanceCredits || advanceCredits;
     progressNotes = backup.progressNotes || progressNotes;
+    deletedStudents = backup.deletedStudents || deletedStudents;
     defaultRate = backup.defaultRate || defaultRate;
     if (backup.achievements) {
       achievements = backup.achievements;
@@ -209,6 +213,7 @@ function checkAndRecoverData() {
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
+    localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
     localStorage.setItem('defaultRate', defaultRate);
     localStorage.setItem('achievements', JSON.stringify(achievements));
 
@@ -2074,7 +2079,9 @@ function findAvailableSlots(day) {
 
 // Update existing student dropdown in Add/Edit class form
 function updateStudentDropdowns() {
-  const students = [...new Set(classes.map(c => c.student))].sort();
+  const students = [...new Set(classes.map(c => c.student))]
+    .filter(s => !deletedStudents.includes(s))
+    .sort();
 
   // Update form's existing student dropdown
   existingStudentSelect.innerHTML = '<option value="">-- Select Existing --</option>';
@@ -2084,6 +2091,78 @@ function updateStudentDropdowns() {
     option.textContent = student;
     existingStudentSelect.appendChild(option);
   });
+}
+
+// Handle delete student - checks for unpaid classes and remaining credit before allowing
+function handleDeleteStudent(student) {
+  const rate = studentRates[student] || defaultRate;
+
+  // Check for unpaid completed classes
+  let unpaidCount = 0;
+  let unpaidAmount = 0;
+  classes.forEach(c => {
+    if (c.student !== student || c.cancelled || c.pendingConfirmation) return;
+    const classId = getClassPaymentId(c);
+    const classDate = new Date(c.date + 'T23:59:59');
+    const isCompleted = classDate <= new Date();
+    if (isCompleted && !paymentStatus[classId]) {
+      unpaidCount++;
+      const minutes = getMinutesBetween(c.start, c.end);
+      unpaidAmount += Math.round((minutes / 60) * rate);
+    }
+  });
+
+  // Check for remaining advance credit
+  const creditBalance = advanceCredits[student] || 0;
+
+  // Block if unpaid classes exist
+  if (unpaidCount > 0) {
+    alert(`Cannot remove ${student}.\n\n${unpaidCount} unpaid class${unpaidCount !== 1 ? 'es' : ''} (₹${unpaidAmount.toLocaleString()}) pending.\n\nPlease mark all classes as paid before removing.`);
+    return;
+  }
+
+  // Block if advance credit remaining
+  if (creditBalance > 0) {
+    const freeClasses = rate > 0 ? Math.floor(creditBalance / rate) : 0;
+    alert(`Cannot remove ${student}.\n\nAdvance credit balance: ₹${creditBalance.toLocaleString()} (${freeClasses} class${freeClasses !== 1 ? 'es' : ''} remaining).\n\nPlease clear the advance credit balance before removing.`);
+    return;
+  }
+
+  // Show summary before confirming
+  let totalClasses = 0;
+  let totalPaid = 0;
+  classes.forEach(c => {
+    if (c.student !== student || c.cancelled) return;
+    const classId = getClassPaymentId(c);
+    const classDate = new Date(c.date + 'T23:59:59');
+    if (classDate <= new Date()) {
+      totalClasses++;
+      if (paymentStatus[classId]) {
+        const minutes = getMinutesBetween(c.start, c.end);
+        totalPaid += Math.round((minutes / 60) * rate);
+      }
+    }
+  });
+
+  const confirmed = confirm(
+    `Remove ${student} from active scheduling?\n\n` +
+    `Summary:\n` +
+    `• Total completed classes: ${totalClasses}\n` +
+    `• Total paid: ₹${totalPaid.toLocaleString()}\n` +
+    `• Unpaid classes: 0\n` +
+    `• Advance credit: ₹0\n\n` +
+    `${student} will no longer appear in class scheduling.\n` +
+    `All payment history and past class data will be preserved.`
+  );
+
+  if (confirmed) {
+    deletedStudents.push(student);
+    localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
+    updateStudentDropdowns();
+    renderReport();
+    renderWeekGrid();
+    showToast(`${student} removed from active scheduling`);
+  }
 }
 
 // Utility Functions
@@ -2587,9 +2666,14 @@ function renderReport() {
               ${badges.length > 0 ? `<span class="student-pending-badge">${badges.join(', ')}</span>` : ''}
               ${pendingTimeBadge}
             </div>
-            <button class="expand-classes-btn" data-student="${escapeHtml(student)}" title="Mark partial or cancel classes">
-              ✏️ Partial/Cancel
-            </button>
+            <div class="student-row-actions">
+              <button class="expand-classes-btn" data-student="${escapeHtml(student)}" title="Mark partial or cancel classes">
+                ✏️ Partial/Cancel
+              </button>
+              <button class="delete-student-btn" data-student="${escapeHtml(student)}" title="Remove student from active scheduling">
+                🗑️
+              </button>
+            </div>
           </td>
           <td>${completedClasses}${(hasUpcomingClasses || hasPendingClasses) ? ` <span class="pending-count">(+${upcomingClasses + stats.pending})</span>` : ''}</td>
           <td class="cancelled-count">${stats.cancelled > 0 ? stats.cancelled : '-'}</td>
@@ -2712,6 +2796,14 @@ function renderReport() {
         const classId = e.target.dataset.classId;
         const student = e.target.dataset.student;
         showClassActionDialog(classId, student);
+      });
+    });
+
+    // Add event listeners to delete student buttons
+    tbody.querySelectorAll('.delete-student-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const student = btn.dataset.student;
+        handleDeleteStudent(student);
       });
     });
   }
@@ -4017,7 +4109,9 @@ function updateProgressStudentDropdown() {
   const select = document.getElementById('progressStudentSelect');
   if (!select) return;
 
-  const students = [...new Set(classes.map(c => c.student))].sort();
+  const students = [...new Set(classes.map(c => c.student))]
+    .filter(s => !deletedStudents.includes(s))
+    .sort();
   const currentValue = select.value;
 
   select.innerHTML = '<option value="">-- All Students --</option>' +
@@ -4034,7 +4128,9 @@ function updateNoteStudentDropdown() {
   const select = document.getElementById('noteStudentSelect');
   if (!select) return;
 
-  const students = [...new Set(classes.map(c => c.student))].sort();
+  const students = [...new Set(classes.map(c => c.student))]
+    .filter(s => !deletedStudents.includes(s))
+    .sort();
 
   select.innerHTML = '<option value="">-- Select Student --</option>' +
     students.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
@@ -5012,6 +5108,7 @@ function createAutoBackup() {
     paymentStatus: paymentStatus,
     advanceCredits: advanceCredits,
     progressNotes: progressNotes,
+    deletedStudents: deletedStudents,
     defaultRate: defaultRate,
     achievements: achievements
   };
@@ -5040,6 +5137,7 @@ function exportData() {
       paymentStatus: paymentStatus,
       advanceCredits: advanceCredits,
       progressNotes: progressNotes,
+      deletedStudents: deletedStudents,
       defaultRate: defaultRate,
       achievements: achievements
     }
@@ -5079,6 +5177,7 @@ function importData(file) {
         paymentStatus = importedData.data.paymentStatus || {};
         advanceCredits = importedData.data.advanceCredits || {};
         progressNotes = importedData.data.progressNotes || [];
+        deletedStudents = importedData.data.deletedStudents || [];
         defaultRate = importedData.data.defaultRate || 500;
         // Import achievements if present (backwards compatible with older backups)
         if (importedData.data.achievements) {
@@ -5091,6 +5190,7 @@ function importData(file) {
         localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
         localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
         localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
+        localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
         localStorage.setItem('defaultRate', defaultRate);
         localStorage.setItem('achievements', JSON.stringify(achievements));
 
@@ -5304,6 +5404,7 @@ function restoreAutoBackup(index) {
     paymentStatus = backup.paymentStatus || {};
     advanceCredits = backup.advanceCredits || {};
     progressNotes = backup.progressNotes || [];
+    deletedStudents = backup.deletedStudents || [];
     defaultRate = backup.defaultRate || 500;
     // Restore achievements if present (backwards compatible with older backups)
     if (backup.achievements) {
@@ -5316,6 +5417,7 @@ function restoreAutoBackup(index) {
     localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
     localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
     localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
+    localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
     localStorage.setItem('defaultRate', defaultRate);
     localStorage.setItem('achievements', JSON.stringify(achievements));
 

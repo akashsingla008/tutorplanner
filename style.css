@@ -5019,6 +5019,12 @@ textarea.share-preview-content:focus {
   gap: 4px;
 }
 
+.student-row-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 .expand-classes-btn {
   background: #e5e7eb;
   border: none;
@@ -5026,12 +5032,28 @@ textarea.share-preview-content:focus {
   border-radius: 6px;
   font-size: 11px;
   cursor: pointer;
-  margin-top: 4px;
   transition: all 0.2s;
 }
 
 .expand-classes-btn:hover {
   background: #d1d5db;
+}
+
+.delete-student-btn {
+  background: none;
+  border: 1px solid #e5e7eb;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  opacity: 0.5;
+}
+
+.delete-student-btn:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+  opacity: 1;
 }
 
 /* Class details expandable row */
