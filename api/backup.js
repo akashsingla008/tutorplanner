@@ -13,32 +13,61 @@
 // change - an external service like Supabase would have required loosening it.
 //
 // Required environment variables (Vercel project settings):
-//   KV_REST_API_URL    | injected automatically when a KV store is connected
-//   KV_REST_API_TOKEN  | injected automatically when a KV store is connected
-//   MM_SYNC_TOKEN      | a passphrase you choose; the app sends it as a header
+//   MM_SYNC_TOKEN  | a passphrase you choose; the app sends it as a header
+//   plus a Redis REST url/token pair, injected automatically when you connect
+//   an Upstash (or Redis) store from the Storage tab.
 //
-// Until those are set every request returns 503 and the app carries on exactly
-// as before, so deploying this cannot break anything.
+// Vercel retired the first-party "KV" product and moved it to the Upstash
+// marketplace entry, and the injected variable names differ between the old
+// and new integrations. Rather than guess, accept every known spelling - and
+// when nothing is configured, report which pieces were found so setup is
+// self-diagnosing instead of a silent 503.
+//
+// Until it is configured every request returns 503 and the app carries on
+// exactly as before, so deploying this cannot break anything.
 
 const LATEST_KEY = 'mm:backup:latest';
 const HISTORY_KEY = 'mm:backup:history';
 const HISTORY_LIMIT = 30;
 const MAX_BYTES = 4 * 1024 * 1024; // generous: real payloads are ~150 KB
 
-function isConfigured() {
-  return Boolean(
-    process.env.KV_REST_API_URL &&
-    process.env.KV_REST_API_TOKEN &&
-    process.env.MM_SYNC_TOKEN
-  );
+const URL_VARS = [
+  'KV_REST_API_URL',            // legacy Vercel KV
+  'UPSTASH_REDIS_REST_URL',     // Upstash marketplace integration
+  'REDIS_REST_URL',
+  'KV_URL_REST'
+];
+const TOKEN_VARS = [
+  'KV_REST_API_TOKEN',
+  'UPSTASH_REDIS_REST_TOKEN',
+  'REDIS_REST_TOKEN',
+  'KV_TOKEN_REST'
+];
+
+function firstSet(names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) return { name, value };
+  }
+  return null;
 }
 
-// Single Redis command via the Upstash REST API.
+function getStoreConfig() {
+  return { url: firstSet(URL_VARS), token: firstSet(TOKEN_VARS) };
+}
+
+function isConfigured() {
+  const { url, token } = getStoreConfig();
+  return Boolean(url && token && process.env.MM_SYNC_TOKEN);
+}
+
+// Single Redis command via the Upstash-compatible REST API.
 async function redis(command) {
-  const response = await fetch(process.env.KV_REST_API_URL, {
+  const { url, token } = getStoreConfig();
+  const response = await fetch(url.value, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+      Authorization: `Bearer ${token.value}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(command)
@@ -80,9 +109,17 @@ module.exports = async function handler(request, response) {
   response.setHeader('Cache-Control', 'no-store');
 
   if (!isConfigured()) {
+    // Say exactly which piece is missing. Names only, never values.
+    const { url, token } = getStoreConfig();
     return response.status(503).json({
       error: 'sync-not-configured',
-      message: 'Connect a Vercel KV store and set MM_SYNC_TOKEN to enable cloud backup.'
+      message: 'Connect an Upstash/Redis store from the Storage tab and set MM_SYNC_TOKEN.',
+      found: {
+        storeUrl: url ? url.name : null,
+        storeToken: token ? token.name : null,
+        syncPassphrase: Boolean(process.env.MM_SYNC_TOKEN)
+      },
+      accepts: { url: URL_VARS, token: TOKEN_VARS }
     });
   }
 
