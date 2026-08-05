@@ -5939,6 +5939,11 @@ function importData(file) {
         // Always fix timezone-shifted dates on import (backup may have old bad dates)
         forceFixTimezoneShiftedDates();
 
+        // Fill in monthly expenses for months that elapsed since the backup was
+        // taken. pullFromCloud() already did this; importing a file should not
+        // behave differently just because the copy arrived from disk.
+        materialiseRecurringExpenses();
+
         // Auto-apply any pending advance credits to completed classes
         applyAdvanceCreditsToCompletedClasses();
 
