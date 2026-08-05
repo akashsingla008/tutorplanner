@@ -165,6 +165,12 @@
       <span class="earnings-value" id="chartTotalEarnings">₹0</span>
       <span class="earnings-pending" id="chartPendingEarnings">(₹0 pending)</span>
     </div>
+    <div class="earnings-net" id="earningsNetRow">
+      <span class="net-part">Expenses <strong id="netExpenses">₹0</strong></span>
+      <span class="net-divider">·</span>
+      <span class="net-part net-highlight">Net <strong id="netBalance">₹0</strong></span>
+      <span class="net-inhand" id="netInHand"></span>
+    </div>
     <div class="earnings-chart" id="earningsChart">
       <!-- Bars will be rendered dynamically -->
     </div>
@@ -172,6 +178,20 @@
       <div class="legend-item"><span class="legend-color paid"></span> Paid</div>
       <div class="legend-item"><span class="legend-color completed"></span> Completed (Unpaid)</div>
       <div class="legend-item"><span class="legend-color upcoming"></span> Upcoming</div>
+    </div>
+  </div>
+
+  <!-- Expenses Section (tutor-borne costs, deducted from earnings) -->
+  <div class="expenses-section" id="expensesSection">
+    <div class="expenses-header">
+      <h3>💸 Expenses</h3>
+      <div class="expenses-header-right">
+        <span class="total-expenses" id="totalExpensesAmount">₹0</span>
+        <button type="button" class="btn btn-sm btn-primary" id="addExpenseBtn">+ Add</button>
+      </div>
+    </div>
+    <div class="expenses-list" id="expensesList">
+      <!-- Rendered dynamically -->
     </div>
   </div>
 
@@ -306,6 +326,55 @@
       <div class="form-actions">
         <button type="button" id="deleteNoteBtn" class="btn btn-danger hidden">Delete</button>
         <button type="submit" id="saveNoteBtn" class="btn btn-primary">Save Note</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Expense Modal -->
+<div id="expenseModal" class="modal hidden">
+  <div class="modal-content expense-modal-content">
+    <div class="modal-header">
+      <h2 id="expenseModalTitle">Add Expense</h2>
+      <button id="closeExpenseModal" class="close-btn">&times;</button>
+    </div>
+
+    <form id="expenseForm">
+      <div class="form-group">
+        <label>Category</label>
+        <div class="expense-category-buttons" id="expenseCategoryButtons">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="expenseDescription">Description</label>
+        <input type="text" id="expenseDescription" maxlength="80" placeholder="e.g. Printing worksheets" required />
+      </div>
+
+      <div class="form-group">
+        <label for="expenseAmount">Amount (₹)</label>
+        <input type="number" id="expenseAmount" min="0" step="1" placeholder="0" required />
+      </div>
+
+      <div class="form-group">
+        <label for="expenseDate">Date</label>
+        <input type="date" id="expenseDate" required />
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="expenseRecurring" />
+          <span>🔁 Repeats every month</span>
+        </label>
+        <p class="expense-hint" id="expenseRecurringHint">
+          A copy is added automatically each month. You can edit or delete any single month.
+        </p>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" id="deleteExpenseBtn" class="btn btn-danger hidden">Delete</button>
+        <button type="submit" id="saveExpenseBtn" class="btn btn-primary">Save Expense</button>
       </div>
     </form>
   </div>

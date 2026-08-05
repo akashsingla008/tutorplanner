@@ -26,6 +26,11 @@ function safeJsonParse(key, defaultValue) {
 function safeSetItem(key, value) {
   try {
     localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    // Single chokepoint for every data write, so cloud sync can't be forgotten
+    // when a new field is added later.
+    if (typeof SYNCED_KEYS !== 'undefined' && SYNCED_KEYS.has(key)) {
+      scheduleCloudSync();
+    }
     return true;
   } catch (e) {
     console.error(`Failed to write localStorage key "${key}":`, e);
@@ -74,6 +79,8 @@ let paymentStatus = safeJsonParse('paymentStatus', {});
 let advanceCredits = safeJsonParse('advanceCredits', {}); // Track advance payment credits per student
 let progressNotes = safeJsonParse('progressNotes', []); // Track student progress notes
 let deletedStudents = safeJsonParse('deletedStudents', []); // Students removed from active scheduling
+let expenses = safeJsonParse('expenses', []); // Tutor-borne costs, deducted from earnings
+let editingExpenseId = null; // Track which expense is being edited
 let editingNoteId = null; // Track which note is being edited
 let currentNoteCategory = 'all'; // Current filter category for progress view
 let isSelectMode = false;
@@ -152,6 +159,7 @@ function init() {
   // automatic backup recorded data that had already been trimmed.
   checkAndCreateBackup();
   cleanupOldClasses();
+  materialiseRecurringExpenses(); // Fill in monthly expenses for any elapsed months
   applyAdvanceCreditsToCompletedClasses(); // Auto-apply credits to completed classes
   renderWeekGrid();
   setupEventListeners();
@@ -185,6 +193,8 @@ function applyRecoveredData(source, classList, replaceAll = false) {
   advanceCredits = fallback(source.advanceCredits, advanceCredits, {});
   progressNotes = fallback(source.progressNotes, progressNotes, []);
   deletedStudents = fallback(source.deletedStudents, deletedStudents, []);
+  // expenses arrived in schema v7.0; older backups simply have none
+  expenses = fallback(source.expenses, expenses, []);
   defaultRate = source.defaultRate || (replaceAll ? 500 : defaultRate);
   if (source.achievements) {
     achievements = source.achievements;
@@ -196,6 +206,7 @@ function applyRecoveredData(source, classList, replaceAll = false) {
   safeSetItem('advanceCredits', JSON.stringify(advanceCredits));
   safeSetItem('progressNotes', JSON.stringify(progressNotes));
   safeSetItem('deletedStudents', JSON.stringify(deletedStudents));
+  safeSetItem('expenses', JSON.stringify(expenses));
   safeSetItem('defaultRate', defaultRate);
   safeSetItem('achievements', JSON.stringify(achievements));
 }
@@ -238,6 +249,10 @@ function checkAndRecoverData() {
       return;
     }
   }
+
+  // Nothing on this device could help - this is exactly the Aug 2026 case,
+  // where the browser evicted the whole origin and took every local snapshot.
+  recoverFromCloudIfEmpty();
 }
 
 // Migrate existing classes to include date field
@@ -404,6 +419,7 @@ function cleanupOldClasses() {
     advanceCredits: advanceCredits,
     progressNotes: progressNotes,
     deletedStudents: deletedStudents,
+    expenses: expenses,
     defaultRate: defaultRate,
     achievements: achievements
   };
@@ -716,6 +732,15 @@ function setupEventListeners() {
   // Header button event listeners (CSP-compliant - no inline onclick)
   document.getElementById("notificationBtn").addEventListener("click", toggleNotifications);
   document.getElementById("backupBtn").addEventListener("click", showBackupDialog);
+
+  // Expenses
+  document.getElementById("addExpenseBtn")?.addEventListener("click", () => openExpenseModal(null));
+  document.getElementById("closeExpenseModal")?.addEventListener("click", closeExpenseModal);
+  document.getElementById("expenseForm")?.addEventListener("submit", handleExpenseSubmit);
+  document.getElementById("deleteExpenseBtn")?.addEventListener("click", handleDeleteExpense);
+  document.getElementById("expenseModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "expenseModal") closeExpenseModal();
+  });
 }
 
 // Handle clicks on week grid using event delegation
@@ -2241,6 +2266,7 @@ function saveClasses() {
           advanceCredits: advanceCredits,
           progressNotes: progressNotes,
           deletedStudents: deletedStudents,
+          expenses: expenses,
           defaultRate: defaultRate,
           achievements: achievements
         });
@@ -2912,6 +2938,40 @@ function renderReport() {
 
   // Render earnings chart
   renderEarningsChart(classesInRange, studentStats, isClassCompleted);
+
+  // Expenses for this period, and the resulting net balance
+  updateNetBalance(startDate, endDate, totalAmount, paidAmount);
+}
+
+// Net = what was billed this period minus what the tutoring cost to deliver.
+// `billedAmount` matches the Amount column total (completed classes, paid or
+// not); `paidAmount` is what has actually been received, so paid - expenses is
+// the cash-in-hand figure shown alongside it.
+function updateNetBalance(startDate, endDate, billedAmount, paidAmount) {
+  const expenseTotal = renderExpenses(startDate, endDate);
+
+  const expensesEl = document.getElementById('netExpenses');
+  const netEl = document.getElementById('netBalance');
+  const inHandEl = document.getElementById('netInHand');
+  const rowEl = document.getElementById('earningsNetRow');
+  if (!expensesEl || !netEl) return;
+
+  const net = billedAmount - expenseTotal;
+  const inHand = paidAmount - expenseTotal;
+
+  expensesEl.textContent = `₹${expenseTotal.toLocaleString()}`;
+  netEl.textContent = `₹${net.toLocaleString()}`;
+
+  if (rowEl) {
+    rowEl.classList.toggle('net-negative', net < 0);
+  }
+
+  // Only worth showing when it differs from net, i.e. money is still owed
+  if (inHandEl) {
+    inHandEl.textContent = paidAmount !== billedAmount
+      ? `in hand ₹${inHand.toLocaleString()}`
+      : '';
+  }
 }
 
 // Update credit summary section with detailed per-student breakdown
@@ -5167,6 +5227,471 @@ function initProgressView() {
   });
 }
 
+// ==================== CLOUD SYNC ====================
+// An off-device copy, because every on-device backup shares one storage bucket
+// with the live data and dies with it when the browser evicts the origin.
+//
+// Entirely optional: without a configured endpoint and a stored token every
+// call short-circuits and the app behaves exactly as it did before.
+
+const SYNC_ENDPOINT = '/api/backup';
+const SYNC_DEBOUNCE_MS = 8000;
+
+// Only these keys are worth a round trip - not autoBackups, dataLossEvents etc.
+const SYNCED_KEYS = new Set([
+  'classes', 'studentRates', 'paymentStatus', 'advanceCredits',
+  'progressNotes', 'deletedStudents', 'expenses', 'defaultRate', 'achievements'
+]);
+
+let syncTimer = null;
+let syncInFlight = false;
+
+function getSyncToken() {
+  return localStorage.getItem('syncToken') || '';
+}
+
+function setSyncToken(token) {
+  if (token) {
+    safeSetItem('syncToken', token);
+  } else {
+    localStorage.removeItem('syncToken');
+  }
+}
+
+function isSyncEnabled() {
+  return getSyncToken().length > 0;
+}
+
+function getLastSyncedAt() {
+  return localStorage.getItem('lastCloudSync') || null;
+}
+
+// The same shape exportData() writes to a file, so a cloud copy and a
+// downloaded backup are interchangeable.
+function buildSyncPayload() {
+  return {
+    exportDate: new Date().toISOString(),
+    version: '7.0',
+    data: {
+      classes: classes,
+      studentRates: studentRates,
+      paymentStatus: paymentStatus,
+      advanceCredits: advanceCredits,
+      progressNotes: progressNotes,
+      deletedStudents: deletedStudents,
+      expenses: expenses,
+      defaultRate: defaultRate,
+      achievements: achievements
+    }
+  };
+}
+
+function scheduleCloudSync() {
+  if (!isSyncEnabled()) return;
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    pushToCloud(false);
+  }, SYNC_DEBOUNCE_MS);
+}
+
+// `interactive` controls whether failures are surfaced. Background syncs stay
+// quiet: a dropped connection shouldn't throw a toast over the schedule.
+async function pushToCloud(interactive) {
+  if (!isSyncEnabled()) {
+    if (interactive) showToast('Cloud sync is not set up yet.', 5000);
+    return { ok: false, reason: 'disabled' };
+  }
+  if (syncInFlight) return { ok: false, reason: 'busy' };
+
+  // Never push an empty dataset over a good cloud copy.
+  if (!classes.length) {
+    if (interactive) showToast('Nothing to sync - no classes loaded.', 5000);
+    return { ok: false, reason: 'empty' };
+  }
+
+  syncInFlight = true;
+  try {
+    const response = await fetch(SYNC_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-mm-token': getSyncToken() },
+      body: JSON.stringify(buildSyncPayload())
+    });
+
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      if (interactive) {
+        showToast(`Cloud sync failed: ${detail.error || response.status}`, 8000);
+      }
+      console.warn('pushToCloud failed', response.status, detail);
+      return { ok: false, reason: detail.error || String(response.status) };
+    }
+
+    const result = await response.json();
+    safeSetItem('lastCloudSync', new Date().toISOString());
+    if (interactive) {
+      showToast(`Backed up ${result.classes} classes to the cloud.`, 5000);
+    }
+    return { ok: true, result };
+  } catch (error) {
+    console.warn('pushToCloud error', error);
+    if (interactive) showToast('Cloud sync failed - no connection?', 6000);
+    return { ok: false, reason: 'network' };
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+async function pullFromCloud(interactive) {
+  if (!isSyncEnabled()) {
+    if (interactive) showToast('Cloud sync is not set up yet.', 5000);
+    return { ok: false, reason: 'disabled' };
+  }
+
+  try {
+    const response = await fetch(SYNC_ENDPOINT, {
+      headers: { 'x-mm-token': getSyncToken() }
+    });
+
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      if (interactive) {
+        showToast(response.status === 404
+          ? 'No cloud backup found yet.'
+          : `Could not read cloud backup: ${detail.error || response.status}`, 8000);
+      }
+      return { ok: false, reason: detail.error || String(response.status) };
+    }
+
+    const payload = await response.json();
+    const incoming = (payload.data && payload.data.classes) || [];
+    if (!incoming.length) {
+      if (interactive) showToast('Cloud backup is empty - not restoring.', 6000);
+      return { ok: false, reason: 'empty' };
+    }
+
+    if (interactive && classes.length > 0) {
+      const when = payload.exportDate ? new Date(payload.exportDate).toLocaleString() : 'unknown date';
+      if (!confirm(`Replace the ${classes.length} classes on this device with ${incoming.length} from the cloud backup (${when})?`)) {
+        return { ok: false, reason: 'cancelled' };
+      }
+    }
+
+    applyRecoveredData(payload.data, incoming, true);
+    migrateClassesToDateFormat();
+    forceFixTimezoneShiftedDates();
+    materialiseRecurringExpenses();
+    applyAdvanceCreditsToCompletedClasses();
+    renderWeekGrid();
+    updateStudentDropdowns();
+    renderReport();
+    showToast(`Restored ${classes.length} classes from the cloud backup.`, 8000);
+    return { ok: true, classes: classes.length };
+  } catch (error) {
+    console.warn('pullFromCloud error', error);
+    if (interactive) showToast('Could not reach the cloud backup.', 6000);
+    return { ok: false, reason: 'network' };
+  }
+}
+
+// Last line of defence: local storage came up empty and no on-device snapshot
+// could help. This is the case that actually happened on 2026-08-05.
+async function recoverFromCloudIfEmpty() {
+  if (classes.length > 0 || !isSyncEnabled()) return;
+  console.warn('No local classes and no usable local snapshot - trying the cloud.');
+  await pullFromCloud(false);
+}
+
+// ==================== EXPENSES ====================
+// Tutor-borne costs (worksheet printing, subscriptions, travel...) deducted
+// from earnings to give a net balance per report period. Expenses are global,
+// not attributed to individual students - splitting shared costs across
+// students has no billing meaning here.
+
+const EXPENSE_CATEGORIES = [
+  { key: 'worksheets', label: '📄 Worksheets' },
+  { key: 'subscription', label: '💳 Subscription' },
+  { key: 'stationery', label: '✏️ Stationery' },
+  { key: 'travel', label: '🚗 Travel' },
+  { key: 'device', label: '💻 Device' },
+  { key: 'other', label: '📦 Other' }
+];
+
+let currentExpenseCategory = 'worksheets';
+
+function expenseCategoryLabel(key) {
+  const found = EXPENSE_CATEGORIES.find(c => c.key === key);
+  return found ? found.label : '📦 Other';
+}
+
+function saveExpenses() {
+  safeSetItem('expenses', JSON.stringify(expenses));
+}
+
+function generateExpenseId(suffix) {
+  const base = `exp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  return suffix ? `${base}_${suffix}` : base;
+}
+
+// Same YYYY-MM-DD string comparison getClassesInRange() uses
+function getExpensesInRange(startDate, endDate) {
+  const startStr = formatDateToYYYYMMDD(startDate);
+  const endStr = formatDateToYYYYMMDD(endDate);
+  return expenses.filter(e => e.date && e.date >= startStr && e.date <= endStr);
+}
+
+function getExpenseTotal(list) {
+  return list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+}
+
+// A monthly expense is stored as one real record per month rather than a rule
+// evaluated at render time. Materialising keeps past months auditable and
+// individually editable - if a subscription price changes or you skip a month,
+// history stays accurate instead of being retroactively rewritten.
+function materialiseRecurringExpenses() {
+  const now = new Date();
+  const limitIndex = now.getFullYear() * 12 + now.getMonth();
+
+  const series = {};
+  expenses.forEach(e => {
+    if (e.recurring !== 'monthly' || !e.date) return;
+    const id = e.seriesId || e.id;
+    if (!series[id]) series[id] = [];
+    series[id].push(e);
+  });
+
+  let created = 0;
+
+  Object.keys(series).forEach(seriesId => {
+    const items = series[seriesId].slice().sort((a, b) => a.date.localeCompare(b.date));
+    const template = items[0];
+    const filled = new Set(items.map(e => e.date.slice(0, 7)));
+    // Months the user explicitly deleted - never recreate these
+    const skipped = new Set(template.skipMonths || []);
+
+    const [year, month, day] = template.date.split('-').map(Number);
+    let index = year * 12 + (month - 1) + 1; // month after the template
+
+    while (index <= limitIndex) {
+      const y = Math.floor(index / 12);
+      const m = index % 12; // 0-based
+      const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+      if (!filled.has(monthKey) && !skipped.has(monthKey)) {
+        // Clamp to the month length so the 31st doesn't spill into next month
+        const lastDay = new Date(y, m + 1, 0).getDate();
+        const occurrence = new Date(y, m, Math.min(day, lastDay));
+        expenses.push({
+          id: generateExpenseId(monthKey),
+          seriesId: seriesId,
+          date: formatDateToYYYYMMDD(occurrence),
+          category: template.category,
+          description: template.description,
+          amount: template.amount,
+          recurring: 'monthly',
+          autoCreated: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        created++;
+      }
+      index++;
+    }
+  });
+
+  if (created > 0) {
+    saveExpenses();
+  }
+  return created;
+}
+
+function renderExpenses(startDate, endDate) {
+  const listEl = document.getElementById('expensesList');
+  const totalEl = document.getElementById('totalExpensesAmount');
+  if (!listEl || !totalEl) return 0;
+
+  const inRange = getExpensesInRange(startDate, endDate)
+    .slice()
+    .sort((a, b) => (a.date === b.date ? 0 : b.date.localeCompare(a.date)));
+
+  const total = getExpenseTotal(inRange);
+  totalEl.textContent = `₹${total.toLocaleString()}`;
+
+  if (inRange.length === 0) {
+    listEl.innerHTML = '<p class="empty-state">No expenses in this period. Tap + Add to record one.</p>';
+    return 0;
+  }
+
+  listEl.innerHTML = inRange.map(e => {
+    const amount = Number(e.amount) || 0;
+    const recurringBadge = e.recurring === 'monthly'
+      ? '<span class="expense-recurring-badge" title="Repeats monthly">🔁</span>'
+      : '';
+    return `
+      <button type="button" class="expense-item" data-expense-id="${escapeHtml(e.id)}">
+        <span class="expense-cat">${escapeHtml(expenseCategoryLabel(e.category))}</span>
+        <span class="expense-body">
+          <span class="expense-desc">${escapeHtml(e.description || '(no description)')}${recurringBadge}</span>
+          <span class="expense-date">${escapeHtml(e.date)}</span>
+        </span>
+        <span class="expense-amount">₹${amount.toLocaleString()}</span>
+      </button>`;
+  }).join('');
+
+  listEl.querySelectorAll('.expense-item').forEach(btn => {
+    btn.addEventListener('click', () => openExpenseModal(btn.dataset.expenseId));
+  });
+
+  return total;
+}
+
+function renderExpenseCategoryButtons() {
+  const wrap = document.getElementById('expenseCategoryButtons');
+  if (!wrap) return;
+  wrap.innerHTML = EXPENSE_CATEGORIES.map(c =>
+    `<button type="button" class="expense-category-btn${c.key === currentExpenseCategory ? ' active' : ''}" data-category="${c.key}">${c.label}</button>`
+  ).join('');
+  wrap.querySelectorAll('.expense-category-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentExpenseCategory = btn.dataset.category;
+      wrap.querySelectorAll('.expense-category-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+}
+
+function openExpenseModal(expenseId) {
+  const modal = document.getElementById('expenseModal');
+  if (!modal) return;
+
+  const existing = expenseId ? expenses.find(e => e.id === expenseId) : null;
+  editingExpenseId = existing ? existing.id : null;
+
+  document.getElementById('expenseModalTitle').textContent = existing ? 'Edit Expense' : 'Add Expense';
+  currentExpenseCategory = existing ? (existing.category || 'other') : 'worksheets';
+  renderExpenseCategoryButtons();
+
+  document.getElementById('expenseDescription').value = existing ? (existing.description || '') : '';
+  document.getElementById('expenseAmount').value = existing ? (existing.amount || '') : '';
+  document.getElementById('expenseDate').value = existing ? existing.date : formatDateToYYYYMMDD(new Date());
+  document.getElementById('expenseRecurring').checked = existing ? existing.recurring === 'monthly' : false;
+
+  const deleteBtn = document.getElementById('deleteExpenseBtn');
+  deleteBtn.classList.toggle('hidden', !existing);
+
+  const hint = document.getElementById('expenseRecurringHint');
+  if (hint) {
+    hint.textContent = existing && existing.autoCreated
+      ? 'This month was created automatically from a monthly expense. Editing changes only this month.'
+      : 'A copy is added automatically each month. You can edit or delete any single month.';
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeExpenseModal() {
+  const modal = document.getElementById('expenseModal');
+  if (modal) modal.classList.add('hidden');
+  editingExpenseId = null;
+}
+
+function handleExpenseSubmit(event) {
+  event.preventDefault();
+
+  const description = document.getElementById('expenseDescription').value.trim();
+  const amount = Math.round(Number(document.getElementById('expenseAmount').value));
+  const date = document.getElementById('expenseDate').value;
+  const recurring = document.getElementById('expenseRecurring').checked ? 'monthly' : 'none';
+
+  if (!description) {
+    showToast('Please enter a description.', 4000);
+    return;
+  }
+  if (!Number.isFinite(amount) || amount < 0) {
+    showToast('Please enter a valid amount.', 4000);
+    return;
+  }
+  if (!date) {
+    showToast('Please pick a date.', 4000);
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  if (editingExpenseId) {
+    const index = expenses.findIndex(e => e.id === editingExpenseId);
+    if (index !== -1) {
+      const previous = expenses[index];
+      expenses[index] = {
+        ...previous,
+        date: date,
+        category: currentExpenseCategory,
+        description: description,
+        amount: amount,
+        recurring: recurring,
+        updatedAt: now
+      };
+      // Turning recurrence off on the template stops future months being added
+      if (previous.recurring === 'monthly' && recurring === 'none' && !previous.seriesId) {
+        expenses[index].skipMonths = previous.skipMonths || [];
+      }
+    }
+  } else {
+    expenses.push({
+      id: generateExpenseId(),
+      date: date,
+      category: currentExpenseCategory,
+      description: description,
+      amount: amount,
+      recurring: recurring,
+      createdAt: now,
+      updatedAt: now
+    });
+  }
+
+  saveExpenses();
+  if (recurring === 'monthly') {
+    materialiseRecurringExpenses();
+  }
+  closeExpenseModal();
+  renderReport();
+  showToast(editingExpenseId ? 'Expense updated' : 'Expense added');
+}
+
+function handleDeleteExpense() {
+  if (!editingExpenseId) return;
+  const expense = expenses.find(e => e.id === editingExpenseId);
+  if (!expense) return;
+
+  if (!confirm(`Delete "${expense.description}" (₹${(Number(expense.amount) || 0).toLocaleString()})?`)) {
+    return;
+  }
+
+  // Remember the skip so materialiseRecurringExpenses() doesn't resurrect it
+  if (expense.recurring === 'monthly' && expense.date) {
+    const monthKey = expense.date.slice(0, 7);
+    const seriesId = expense.seriesId || expense.id;
+    const template = expenses.find(e => (e.seriesId || e.id) === seriesId && !e.seriesId);
+    if (template && template.id !== expense.id) {
+      template.skipMonths = Array.from(new Set([...(template.skipMonths || []), monthKey]));
+    } else if (template && template.id === expense.id) {
+      // Deleting the template itself ends the series; keep already-created months
+      expenses.forEach(e => {
+        if (e.seriesId === seriesId && e.id !== expense.id) {
+          e.recurring = 'none';
+          delete e.seriesId;
+        }
+      });
+    }
+  }
+
+  expenses = expenses.filter(e => e.id !== editingExpenseId);
+  saveExpenses();
+  closeExpenseModal();
+  renderReport();
+  showToast('Expense deleted');
+}
+
 // ==================== BACKUP FUNCTIONS ====================
 
 // How many automatic snapshots to retain. A snapshot of a few hundred classes
@@ -5212,6 +5737,7 @@ function createAutoBackup() {
     advanceCredits: advanceCredits,
     progressNotes: progressNotes,
     deletedStudents: deletedStudents,
+    expenses: expenses,
     defaultRate: defaultRate,
     achievements: achievements
   };
@@ -5233,7 +5759,7 @@ function createAutoBackup() {
 function exportData() {
   const exportData = {
     exportDate: new Date().toISOString(),
-    version: '6.0', // v6.0: Added achievements for gamification
+    version: '7.0', // v7.0: Added expenses tracking
     data: {
       classes: classes,
       studentRates: studentRates,
@@ -5241,6 +5767,7 @@ function exportData() {
       advanceCredits: advanceCredits,
       progressNotes: progressNotes,
       deletedStudents: deletedStudents,
+      expenses: expenses,
       defaultRate: defaultRate,
       achievements: achievements
     }
@@ -5367,8 +5894,37 @@ async function showBackupDialog() {
   if (isPersisted === true) {
     persistenceHtml = '<div class="persistence-status good">🛡️ Storage Protected - Data will not be auto-deleted</div>';
   } else if (isPersisted === false) {
-    persistenceHtml = '<div class="persistence-status warning">⚠️ Storage NOT Protected - Browser may delete data when storage is low. Export backups regularly!</div>';
+    // This is the state that caused the Aug 2026 loss, so say what to do about it.
+    persistenceHtml =
+      '<div class="persistence-status warning">' +
+      '⚠️ Storage NOT Protected - the browser can delete everything on this device, ' +
+      'including the automatic backups below.<br><br>' +
+      '<strong>Fix it:</strong> Chrome menu (⋮) → <strong>Add to Home screen</strong>, ' +
+      'then open the app from that icon. Installed apps are far more likely to be granted ' +
+      'protected storage. Set up Cloud Backup below as well.' +
+      '</div>';
   }
+
+  // Cloud sync status
+  const syncOn = isSyncEnabled();
+  const lastSync = getLastSyncedAt();
+  const lastSyncText = lastSync
+    ? `Last backed up ${new Date(lastSync).toLocaleString()}`
+    : 'Not backed up yet';
+  const cloudHtml = `
+      <div class="backup-section">
+        <h4>☁️ Cloud Backup ${syncOn ? '<span class="cloud-on">ON</span>' : '<span class="cloud-off">OFF</span>'}</h4>
+        <p>${syncOn
+          ? escapeHtml(lastSyncText) + '. Saves automatically a few seconds after any change.'
+          : 'A copy stored off this device, so a browser wipe cannot take it. Enter the passphrase set on the server to switch it on.'}</p>
+        <input type="password" id="syncTokenInput" class="sync-token-input" placeholder="Sync passphrase"
+               autocomplete="off" value="${syncOn ? escapeHtml(getSyncToken()) : ''}" />
+        <button class="btn btn-secondary" id="saveSyncTokenBtn">${syncOn ? 'Update passphrase' : 'Enable cloud backup'}</button>
+        ${syncOn ? `
+        <button class="btn btn-primary" id="cloudPushBtn">Back up now</button>
+        <button class="btn btn-secondary" id="cloudPullBtn">Restore from cloud</button>
+        ${syncOn ? '<button class="btn btn-secondary" id="disableSyncBtn">Turn off</button>' : ''}` : ''}
+      </div>`;
 
   const dialogHtml = `
     <div class="backup-dialog-content">
@@ -5386,6 +5942,8 @@ async function showBackupDialog() {
         </div>
         ${storagePercent > 70 ? '<p class="storage-warning">⚠️ Storage getting full. Please export a backup!</p>' : ''}
       </div>
+
+      ${cloudHtml}
 
       <div class="backup-section">
         <h4>📥 Export Data</h4>
@@ -5444,6 +6002,35 @@ async function showBackupDialog() {
     }
   });
   document.getElementById('closeBackupBtn').addEventListener('click', closeBackupDialog);
+
+  // Cloud backup controls
+  document.getElementById('saveSyncTokenBtn')?.addEventListener('click', async () => {
+    const token = document.getElementById('syncTokenInput').value.trim();
+    if (!token) {
+      showToast('Enter the sync passphrase first.', 5000);
+      return;
+    }
+    setSyncToken(token);
+    const result = await pushToCloud(true);
+    if (!result.ok && (result.reason === 'unauthorized' || result.reason === '401')) {
+      setSyncToken('');
+      showToast('That passphrase was rejected by the server.', 8000);
+    }
+    closeBackupDialog();
+    showBackupDialog();
+  });
+  document.getElementById('cloudPushBtn')?.addEventListener('click', () => pushToCloud(true));
+  document.getElementById('cloudPullBtn')?.addEventListener('click', async () => {
+    await pullFromCloud(true);
+    closeBackupDialog();
+  });
+  document.getElementById('disableSyncBtn')?.addEventListener('click', () => {
+    if (confirm('Turn off cloud backup on this device? The copy already stored stays there.')) {
+      setSyncToken('');
+      closeBackupDialog();
+      showToast('Cloud backup turned off.', 5000);
+    }
+  });
 
   // Event delegation for backup items
   document.getElementById('backupList').addEventListener('click', (e) => {

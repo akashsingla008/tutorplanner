@@ -5410,3 +5410,209 @@ textarea.share-preview-content:focus {
 .btn-success:hover {
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
+
+/* ==================== EXPENSES ==================== */
+
+/* Net balance line, sits directly under Total Earned in the chart card */
+.earnings-net {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -8px 0 16px;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e7eb;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.earnings-net .net-part strong {
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+}
+
+.earnings-net .net-highlight strong {
+  color: #16a34a;
+  font-size: 1.05rem;
+}
+
+.earnings-net.net-negative .net-highlight strong {
+  color: #dc2626;
+}
+
+.earnings-net .net-divider {
+  color: #d1d5db;
+}
+
+.earnings-net .net-inhand {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.expenses-section {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid #f87171;
+}
+
+.expenses-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.expenses-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #991b1b;
+}
+
+.expenses-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.total-expenses {
+  font-weight: 700;
+  color: #991b1b;
+  font-variant-numeric: tabular-nums;
+}
+
+.expenses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.expense-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(153, 27, 27, 0.15);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+.expense-item:active {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.expense-cat {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.expense-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.expense-desc {
+  color: #111827;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-recurring-badge {
+  margin-left: 4px;
+  font-size: 0.75rem;
+}
+
+.expense-date {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.expense-amount {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: #991b1b;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Category picker in the expense modal */
+.expense-category-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.expense-category-btn {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.expense-category-btn.active {
+  background: #3d8fc4;
+  border-color: #3d8fc4;
+  color: #fff;
+}
+
+.expense-hint {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+/* ==================== CLOUD BACKUP ==================== */
+
+.cloud-on,
+.cloud-off {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.cloud-on {
+  background: #16a34a;
+  color: #fff;
+}
+
+.cloud-off {
+  background: #e5e7eb;
+  color: #6b7280;
+}
+
+.sync-token-input {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.sync-token-input:focus {
+  outline: none;
+  border-color: #3d8fc4;
+}
