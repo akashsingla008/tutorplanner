@@ -31,6 +31,32 @@ const HISTORY_KEY = 'mm:backup:history';
 const HISTORY_LIMIT = 30;
 const MAX_BYTES = 4 * 1024 * 1024; // generous: real payloads are ~150 KB
 
+// Rolling per-day snapshots, so a bad day can be rolled back rather than only
+// the newest state being recoverable. `latest` alone is a single point of
+// failure: the empty-overwrite guard catches a wipe but not corruption.
+//
+// Retention is by count, not by TTL: keeping the 7 most recent day snapshots
+// however old they are means an app left unopened for a fortnight still has a
+// week of history, whereas a 7-day TTL would silently expire all of it.
+const DAY_PREFIX = 'mm:backup:day:';
+const DAYS_INDEX = 'mm:backup:days';
+const DAILY_RETENTION = 7;
+
+// One snapshot is ~78 KB, so 7 days plus `latest` is ~0.6 MB against Upstash's
+// 256 MB free allowance, and the extra commands per push are a rounding error
+// against 500K/month.
+
+function utcDateKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// The client sends its own local calendar date, because the tutor is in IST and
+// a UTC day boundary would file an 11pm edit under the following day.
+function resolveDayKey(payload) {
+  const supplied = payload && payload.localDate;
+  return /^\d{4}-\d{2}-\d{2}$/.test(supplied || '') ? supplied : utcDateKey();
+}
+
 const URL_VARS = [
   'KV_REST_API_URL',            // legacy Vercel KV
   'UPSTASH_REDIS_REST_URL',     // Upstash marketplace integration
@@ -164,6 +190,28 @@ module.exports = async function handler(request, response) {
         return response.status(200).json({ history });
       }
 
+      // List the day snapshots available to restore from
+      if (request.query && request.query.days) {
+        const rows = await redis(['LRANGE', DAYS_INDEX, 0, DAILY_RETENTION - 1]);
+        const days = (rows || []).map(row => {
+          try { return JSON.parse(row); } catch (e) { return null; }
+        }).filter(Boolean);
+        return response.status(200).json({ retentionDays: DAILY_RETENTION, days });
+      }
+
+      // Restore one specific day
+      if (request.query && request.query.day) {
+        const day = String(request.query.day);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+          return response.status(400).json({ error: 'bad-day-format' });
+        }
+        const dayRaw = await redis(['GET', DAY_PREFIX + day]);
+        if (!dayRaw) {
+          return response.status(404).json({ error: 'no-snapshot-for-day', day });
+        }
+        return response.status(200).json(JSON.parse(dayRaw));
+      }
+
       const raw = await redis(['GET', LATEST_KEY]);
       if (!raw) {
         return response.status(404).json({ error: 'no-backup-yet' });
@@ -203,11 +251,45 @@ module.exports = async function handler(request, response) {
       }
 
       const meta = summarise(payload);
+      const dayKey = resolveDayKey(payload);
+
       await redis(['SET', LATEST_KEY, serialised]);
       await redis(['LPUSH', HISTORY_KEY, JSON.stringify(meta)]);
       await redis(['LTRIM', HISTORY_KEY, 0, HISTORY_LIMIT - 1]);
 
-      return response.status(200).json({ ok: true, ...meta });
+      // Today's snapshot always reflects the most recent push of that day, so
+      // repeated edits refresh it rather than consuming a retention slot.
+      await redis(['SET', DAY_PREFIX + dayKey, serialised]);
+
+      const indexRows = (await redis(['LRANGE', DAYS_INDEX, 0, -1])) || [];
+      const index = indexRows.map(row => {
+        try { return JSON.parse(row); } catch (e) { return null; }
+      }).filter(Boolean);
+
+      const entry = { day: dayKey, savedAt: meta.savedAt, classes: meta.classes, expenses: meta.expenses };
+      const withoutToday = index.filter(row => row.day !== dayKey);
+      const updated = [entry, ...withoutToday]
+        .sort((a, b) => b.day.localeCompare(a.day)); // newest first
+      const kept = updated.slice(0, DAILY_RETENTION);
+      const evicted = updated.slice(DAILY_RETENTION);
+
+      // Rewrite the index rather than patching it: it holds at most 8 rows, and
+      // an exact rewrite can't drift out of step with the snapshots themselves.
+      await redis(['DEL', DAYS_INDEX]);
+      if (kept.length) {
+        await redis(['RPUSH', DAYS_INDEX, ...kept.map(row => JSON.stringify(row))]);
+      }
+      for (const row of evicted) {
+        await redis(['DEL', DAY_PREFIX + row.day]);
+      }
+
+      return response.status(200).json({
+        ok: true,
+        ...meta,
+        day: dayKey,
+        daysRetained: kept.length,
+        evictedDays: evicted.map(row => row.day)
+      });
     }
 
     response.setHeader('Allow', 'GET, POST');

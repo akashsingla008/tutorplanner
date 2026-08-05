@@ -5271,6 +5271,9 @@ function getLastSyncedAt() {
 function buildSyncPayload() {
   return {
     exportDate: new Date().toISOString(),
+    // The server files day snapshots under this, so an 11pm IST edit is not
+    // recorded against the following UTC day.
+    localDate: formatDateToYYYYMMDD(new Date()),
     version: '7.0',
     data: {
       classes: classes,
@@ -5342,14 +5345,16 @@ async function pushToCloud(interactive) {
   }
 }
 
-async function pullFromCloud(interactive) {
+// `day` (YYYY-MM-DD) restores that day's snapshot instead of the newest state.
+async function pullFromCloud(interactive, day) {
   if (!isSyncEnabled()) {
     if (interactive) showToast('Cloud sync is not set up yet.', 5000);
     return { ok: false, reason: 'disabled' };
   }
 
   try {
-    const response = await fetch(SYNC_ENDPOINT, {
+    const url = day ? `${SYNC_ENDPOINT}?day=${encodeURIComponent(day)}` : SYNC_ENDPOINT;
+    const response = await fetch(url, {
       headers: { 'x-mm-token': getSyncToken() }
     });
 
@@ -5372,7 +5377,8 @@ async function pullFromCloud(interactive) {
 
     if (interactive && classes.length > 0) {
       const when = payload.exportDate ? new Date(payload.exportDate).toLocaleString() : 'unknown date';
-      if (!confirm(`Replace the ${classes.length} classes on this device with ${incoming.length} from the cloud backup (${when})?`)) {
+      const label = day ? `the snapshot from ${day}` : 'the latest cloud backup';
+      if (!confirm(`Replace the ${classes.length} classes on this device with ${incoming.length} from ${label} (${when})?`)) {
         return { ok: false, reason: 'cancelled' };
       }
     }
@@ -5391,6 +5397,22 @@ async function pullFromCloud(interactive) {
     console.warn('pullFromCloud error', error);
     if (interactive) showToast('Could not reach the cloud backup.', 6000);
     return { ok: false, reason: 'network' };
+  }
+}
+
+// The last few days kept server-side, newest first.
+async function fetchCloudDays() {
+  if (!isSyncEnabled()) return [];
+  try {
+    const response = await fetch(`${SYNC_ENDPOINT}?days=1`, {
+      headers: { 'x-mm-token': getSyncToken() }
+    });
+    if (!response.ok) return [];
+    const payload = await response.json();
+    return Array.isArray(payload.days) ? payload.days : [];
+  } catch (error) {
+    console.warn('fetchCloudDays failed', error);
+    return [];
   }
 }
 
@@ -5907,6 +5929,7 @@ async function showBackupDialog() {
 
   // Cloud sync status
   const syncOn = isSyncEnabled();
+  const cloudDays = syncOn ? await fetchCloudDays() : [];
   const lastSync = getLastSyncedAt();
   const lastSyncText = lastSync
     ? `Last backed up ${new Date(lastSync).toLocaleString()}`
@@ -5922,8 +5945,19 @@ async function showBackupDialog() {
         <button class="btn btn-secondary" id="saveSyncTokenBtn">${syncOn ? 'Update passphrase' : 'Enable cloud backup'}</button>
         ${syncOn ? `
         <button class="btn btn-primary" id="cloudPushBtn">Back up now</button>
-        <button class="btn btn-secondary" id="cloudPullBtn">Restore from cloud</button>
-        ${syncOn ? '<button class="btn btn-secondary" id="disableSyncBtn">Turn off</button>' : ''}` : ''}
+        <button class="btn btn-secondary" id="cloudPullBtn">Restore latest</button>
+        ${cloudDays.length ? `
+        <div class="cloud-days">
+          <p class="cloud-days-label">Or restore a specific day (last ${cloudDays.length} kept):</p>
+          <div class="cloud-days-list" id="cloudDaysList">
+            ${cloudDays.map(entry => `
+              <button type="button" class="cloud-day-item" data-day="${escapeHtml(entry.day)}">
+                <span class="cloud-day-date">${escapeHtml(entry.day)}</span>
+                <span class="cloud-day-meta">${entry.classes} classes${entry.expenses ? ` &middot; ${entry.expenses} expenses` : ''}</span>
+              </button>`).join('')}
+          </div>
+        </div>` : ''}
+        <button class="btn btn-secondary" id="disableSyncBtn">Turn off</button>` : ''}
       </div>`;
 
   const dialogHtml = `
@@ -6023,6 +6057,12 @@ async function showBackupDialog() {
   document.getElementById('cloudPullBtn')?.addEventListener('click', async () => {
     await pullFromCloud(true);
     closeBackupDialog();
+  });
+  document.getElementById('cloudDaysList')?.addEventListener('click', async (e) => {
+    const dayBtn = e.target.closest('.cloud-day-item');
+    if (!dayBtn) return;
+    const result = await pullFromCloud(true, dayBtn.dataset.day);
+    if (result.ok) closeBackupDialog();
   });
   document.getElementById('disableSyncBtn')?.addEventListener('click', () => {
     if (confirm('Turn off cloud backup on this device? The copy already stored stays there.')) {
