@@ -108,6 +108,33 @@ function summarise(payload) {
 module.exports = async function handler(request, response) {
   response.setHeader('Cache-Control', 'no-store');
 
+  // Unauthenticated setup check. Deliberately reveals nothing sensitive: which
+  // env var names were found (never their values) and whether the store answers
+  // a PING. It performs no reads or writes of backup data. This exists so the
+  // Upstash wiring can be confirmed without handing the passphrase around.
+  if (request.query && request.query.health) {
+    const { url, token } = getStoreConfig();
+    const result = {
+      configured: isConfigured(),
+      storeUrlVar: url ? url.name : null,
+      storeTokenVar: token ? token.name : null,
+      syncPassphraseSet: Boolean(process.env.MM_SYNC_TOKEN),
+      ping: null
+    };
+
+    if (url && token) {
+      try {
+        result.ping = await redis(['PING']);
+      } catch (error) {
+        result.ping = 'error';
+        result.pingError = String(error.message || error).slice(0, 200);
+      }
+    }
+
+    result.ready = result.configured && result.ping === 'PONG';
+    return response.status(result.ready ? 200 : 503).json(result);
+  }
+
   if (!isConfigured()) {
     // Say exactly which piece is missing. Names only, never values.
     const { url, token } = getStoreConfig();
