@@ -167,6 +167,10 @@
     </div>
     <div class="earnings-net" id="earningsNetRow">
       <span class="net-part">Expenses <strong id="netExpenses">₹0</strong></span>
+      <span class="net-part net-income" id="netIncomeWrap" style="display: none;">
+        <span class="net-divider">·</span>
+        Commission in <strong id="netIncome">₹0</strong>
+      </span>
       <span class="net-divider">·</span>
       <span class="net-part net-highlight">Net <strong id="netBalance">₹0</strong></span>
       <span class="net-inhand" id="netInHand"></span>
@@ -184,7 +188,7 @@
   <!-- Expenses Section (tutor-borne costs, deducted from earnings) -->
   <div class="expenses-section" id="expensesSection">
     <div class="expenses-header">
-      <h3>💸 Expenses</h3>
+      <h3>💸 Expenses &amp; Commission</h3>
       <div class="expenses-header-right">
         <span class="total-expenses" id="totalExpensesAmount">₹0</span>
         <button type="button" class="btn btn-sm btn-primary" id="addExpenseBtn">+ Add</button>
@@ -340,6 +344,17 @@
     </div>
 
     <form id="expenseForm">
+      <div class="form-group">
+        <label>Direction</label>
+        <div class="expense-direction-buttons">
+          <button type="button" class="expense-direction-btn active" data-direction="out">↑ Money out</button>
+          <button type="button" class="expense-direction-btn" data-direction="in">↓ Money in</button>
+        </div>
+        <p class="expense-hint" id="expenseDirectionHint">
+          Money out is deducted from earnings. Money in — commission you receive — is added.
+        </p>
+      </div>
+
       <div class="form-group">
         <label>Category</label>
         <div class="expense-category-buttons" id="expenseCategoryButtons">

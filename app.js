@@ -741,6 +741,12 @@ function setupEventListeners() {
   document.getElementById("expenseModal")?.addEventListener("click", (e) => {
     if (e.target.id === "expenseModal") closeExpenseModal();
   });
+  document.querySelectorAll(".expense-direction-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      currentExpenseDirection = btn.dataset.direction === "in" ? "in" : "out";
+      renderExpenseDirectionButtons();
+    });
+  });
 }
 
 // Handle clicks on week grid using event delegation
@@ -2948,18 +2954,24 @@ function renderReport() {
 // not); `paidAmount` is what has actually been received, so paid - expenses is
 // the cash-in-hand figure shown alongside it.
 function updateNetBalance(startDate, endDate, billedAmount, paidAmount) {
-  const expenseTotal = renderExpenses(startDate, endDate);
+  const totals = renderExpenses(startDate, endDate);
 
   const expensesEl = document.getElementById('netExpenses');
   const netEl = document.getElementById('netBalance');
   const inHandEl = document.getElementById('netInHand');
   const rowEl = document.getElementById('earningsNetRow');
+  const incomeEl = document.getElementById('netIncome');
+  const incomeWrapEl = document.getElementById('netIncomeWrap');
   if (!expensesEl || !netEl) return;
 
-  const net = billedAmount - expenseTotal;
-  const inHand = paidAmount - expenseTotal;
+  // Commission received is income, so it offsets spending rather than adding
+  // to it: net effect on the balance is (out - in).
+  const net = billedAmount - totals.net;
+  const inHand = paidAmount - totals.net;
 
-  expensesEl.textContent = `₹${expenseTotal.toLocaleString()}`;
+  expensesEl.textContent = `₹${totals.out.toLocaleString()}`;
+  if (incomeEl) incomeEl.textContent = `₹${totals.in.toLocaleString()}`;
+  if (incomeWrapEl) incomeWrapEl.style.display = totals.in > 0 ? '' : 'none';
   netEl.textContent = `₹${net.toLocaleString()}`;
 
   if (rowEl) {
@@ -5461,6 +5473,7 @@ async function recoverFromCloudIfEmpty() {
 const EXPENSE_CATEGORIES = [
   { key: 'worksheets', label: '📄 Worksheets' },
   { key: 'subscription', label: '💳 Subscription' },
+  { key: 'commission', label: '🤝 Commission' },
   { key: 'stationery', label: '✏️ Stationery' },
   { key: 'travel', label: '🚗 Travel' },
   { key: 'device', label: '💻 Device' },
@@ -5468,6 +5481,15 @@ const EXPENSE_CATEGORIES = [
 ];
 
 let currentExpenseCategory = 'worksheets';
+// 'out' is money spent, 'in' is money received (a commission paid *to* the
+// tutor). Commission runs both ways in tutoring, so a single-signed expense
+// list cannot represent it. Records written before this existed have no
+// `direction` and are treated as 'out'.
+let currentExpenseDirection = 'out';
+
+function isIncomingExpense(entry) {
+  return entry && entry.direction === 'in';
+}
 
 function expenseCategoryLabel(key) {
   const found = EXPENSE_CATEGORIES.find(c => c.key === key);
@@ -5492,6 +5514,17 @@ function getExpensesInRange(startDate, endDate) {
 
 function getExpenseTotal(list) {
   return list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+}
+
+// Outgoing and incoming totals for a period. Net effect is `out - in`.
+function splitExpenseTotals(list) {
+  let out = 0, incoming = 0;
+  list.forEach(e => {
+    const amount = Number(e.amount) || 0;
+    if (isIncomingExpense(e)) incoming += amount;
+    else out += amount;
+  });
+  return { out, in: incoming, net: out - incoming };
 }
 
 // A monthly expense is stored as one real record per month rather than a rule
@@ -5538,6 +5571,7 @@ function materialiseRecurringExpenses() {
           category: template.category,
           description: template.description,
           amount: template.amount,
+          direction: template.direction === 'in' ? 'in' : 'out',
           recurring: 'monthly',
           autoCreated: true,
           createdAt: new Date().toISOString(),
@@ -5564,35 +5598,61 @@ function renderExpenses(startDate, endDate) {
     .slice()
     .sort((a, b) => (a.date === b.date ? 0 : b.date.localeCompare(a.date)));
 
-  const total = getExpenseTotal(inRange);
-  totalEl.textContent = `₹${total.toLocaleString()}`;
+  const totals = splitExpenseTotals(inRange);
+  totalEl.textContent = totals.in > 0
+    ? `↑₹${totals.out.toLocaleString()} · ↓₹${totals.in.toLocaleString()}`
+    : `₹${totals.out.toLocaleString()}`;
 
   if (inRange.length === 0) {
-    listEl.innerHTML = '<p class="empty-state">No expenses in this period. Tap + Add to record one.</p>';
-    return 0;
+    listEl.innerHTML = '<p class="empty-state">Nothing recorded in this period. Tap + Add for an expense or a commission.</p>';
+    return totals;
   }
 
+  // Each row is a container, not a button, so the delete control can be a real
+  // button beside the tappable edit area rather than nested inside one.
   listEl.innerHTML = inRange.map(e => {
     const amount = Number(e.amount) || 0;
+    const incoming = isIncomingExpense(e);
     const recurringBadge = e.recurring === 'monthly'
       ? '<span class="expense-recurring-badge" title="Repeats monthly">🔁</span>'
       : '';
     return `
-      <button type="button" class="expense-item" data-expense-id="${escapeHtml(e.id)}">
-        <span class="expense-cat">${escapeHtml(expenseCategoryLabel(e.category))}</span>
-        <span class="expense-body">
-          <span class="expense-desc">${escapeHtml(e.description || '(no description)')}${recurringBadge}</span>
-          <span class="expense-date">${escapeHtml(e.date)}</span>
-        </span>
-        <span class="expense-amount">₹${amount.toLocaleString()}</span>
-      </button>`;
+      <div class="expense-item${incoming ? ' incoming' : ''}">
+        <button type="button" class="expense-main" data-expense-id="${escapeHtml(e.id)}" title="Tap to edit">
+          <span class="expense-cat">${escapeHtml(expenseCategoryLabel(e.category))}</span>
+          <span class="expense-body">
+            <span class="expense-desc">${escapeHtml(e.description || '(no description)')}${recurringBadge}</span>
+            <span class="expense-date">${escapeHtml(e.date)}</span>
+          </span>
+          <span class="expense-amount">${incoming ? '+' : '−'}₹${amount.toLocaleString()}</span>
+        </button>
+        <button type="button" class="expense-delete" data-expense-id="${escapeHtml(e.id)}"
+                title="Delete" aria-label="Delete ${escapeHtml(e.description || 'entry')}">&times;</button>
+      </div>`;
   }).join('');
 
-  listEl.querySelectorAll('.expense-item').forEach(btn => {
+  listEl.querySelectorAll('.expense-main').forEach(btn => {
     btn.addEventListener('click', () => openExpenseModal(btn.dataset.expenseId));
   });
+  // Delete straight from the row. Previously the only route was to discover
+  // that a row was tappable and find Delete inside the edit modal.
+  listEl.querySelectorAll('.expense-delete').forEach(btn => {
+    btn.addEventListener('click', () => deleteExpenseById(btn.dataset.expenseId));
+  });
 
-  return total;
+  return totals;
+}
+
+function renderExpenseDirectionButtons() {
+  document.querySelectorAll('.expense-direction-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.direction === currentExpenseDirection);
+  });
+  const hint = document.getElementById('expenseDirectionHint');
+  if (hint) {
+    hint.textContent = currentExpenseDirection === 'in'
+      ? 'Money in - commission you receive - is added to your net balance.'
+      : 'Money out is deducted from your earnings.';
+  }
 }
 
 function renderExpenseCategoryButtons() {
@@ -5617,8 +5677,12 @@ function openExpenseModal(expenseId) {
   const existing = expenseId ? expenses.find(e => e.id === expenseId) : null;
   editingExpenseId = existing ? existing.id : null;
 
-  document.getElementById('expenseModalTitle').textContent = existing ? 'Edit Expense' : 'Add Expense';
+  currentExpenseDirection = existing && existing.direction === 'in' ? 'in' : 'out';
+  document.getElementById('expenseModalTitle').textContent = existing
+    ? (currentExpenseDirection === 'in' ? 'Edit Commission' : 'Edit Expense')
+    : 'Add Expense or Commission';
   currentExpenseCategory = existing ? (existing.category || 'other') : 'worksheets';
+  renderExpenseDirectionButtons();
   renderExpenseCategoryButtons();
 
   document.getElementById('expenseDescription').value = existing ? (existing.description || '') : '';
@@ -5678,6 +5742,7 @@ function handleExpenseSubmit(event) {
         category: currentExpenseCategory,
         description: description,
         amount: amount,
+        direction: currentExpenseDirection,
         recurring: recurring,
         updatedAt: now
       };
@@ -5693,11 +5758,17 @@ function handleExpenseSubmit(event) {
       category: currentExpenseCategory,
       description: description,
       amount: amount,
+      direction: currentExpenseDirection,
       recurring: recurring,
       createdAt: now,
       updatedAt: now
     });
   }
+
+  // Capture before closeExpenseModal() clears it, or the message always read
+  // "added" even when editing.
+  const wasEditing = Boolean(editingExpenseId);
+  const noun = currentExpenseDirection === 'in' ? 'Commission' : 'Expense';
 
   saveExpenses();
   if (recurring === 'monthly') {
@@ -5705,15 +5776,21 @@ function handleExpenseSubmit(event) {
   }
   closeExpenseModal();
   renderReport();
-  showToast(editingExpenseId ? 'Expense updated' : 'Expense added');
+  showToast(`${noun} ${wasEditing ? 'updated' : 'added'}`);
 }
 
+// Modal wrapper - the row's own delete button calls deleteExpenseById directly.
 function handleDeleteExpense() {
   if (!editingExpenseId) return;
-  const expense = expenses.find(e => e.id === editingExpenseId);
+  deleteExpenseById(editingExpenseId);
+}
+
+function deleteExpenseById(expenseId) {
+  const expense = expenses.find(e => e.id === expenseId);
   if (!expense) return;
 
-  if (!confirm(`Delete "${expense.description}" (₹${(Number(expense.amount) || 0).toLocaleString()})?`)) {
+  const label = isIncomingExpense(expense) ? 'commission' : 'expense';
+  if (!confirm(`Delete this ${label}?\n\n${expense.description}\n₹${(Number(expense.amount) || 0).toLocaleString()} on ${expense.date}`)) {
     return;
   }
 
@@ -5735,11 +5812,13 @@ function handleDeleteExpense() {
     }
   }
 
-  expenses = expenses.filter(e => e.id !== editingExpenseId);
+  // Must filter on the argument, not editingExpenseId: the row's delete button
+  // calls this with no modal open, so editingExpenseId is null there.
+  expenses = expenses.filter(e => e.id !== expenseId);
   saveExpenses();
   closeExpenseModal();
   renderReport();
-  showToast('Expense deleted');
+  showToast(`${label === 'commission' ? 'Commission' : 'Expense'} deleted`);
 }
 
 // ==================== BACKUP FUNCTIONS ====================

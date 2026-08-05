@@ -5701,3 +5701,84 @@ textarea.share-preview-content:focus {
 .credit-past-list .credit-student-row {
   opacity: 0.7;
 }
+
+/* Direction toggle + incoming commission + per-row delete */
+.expense-direction-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.expense-direction-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.85rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.expense-direction-btn.active[data-direction="out"] {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+
+.expense-direction-btn.active[data-direction="in"] {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+.expense-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.expense-delete {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(153, 27, 27, 0.2);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  color: #991b1b;
+  font-size: 1.15rem;
+  line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.expense-delete:active {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+
+/* Incoming commission reads as money arriving, not money spent */
+.expense-item.incoming {
+  background: rgba(240, 253, 244, 0.9);
+  border-color: rgba(22, 163, 74, 0.3);
+}
+
+.expense-item.incoming .expense-amount {
+  color: #16a34a;
+}
+
+.earnings-net .net-income strong {
+  color: #16a34a;
+}
