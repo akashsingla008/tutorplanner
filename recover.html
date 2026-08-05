@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Recovery — MM Planner</title>
+  <link rel="icon" href="icons/icon-192.png" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+      padding: 16px;
+      line-height: 1.5;
+      -webkit-text-size-adjust: 100%;
+    }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    h2 { font-size: 16px; margin: 0 0 10px; }
+    .sub { color: #6b7280; font-size: 13px; margin-bottom: 16px; word-break: break-all; }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+    .banner { border-left: 4px solid #3d8fc4; }
+    .banner.good { border-left-color: #16a34a; background: #f0fdf4; }
+    .banner.warn { border-left-color: #f59e0b; background: #fffbeb; }
+    .banner.bad  { border-left-color: #dc2626; background: #fef2f2; }
+    .verdict { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 13px 14px;
+      border: 0;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      font-family: inherit;
+    }
+    .btn-primary { background: #3d8fc4; color: #fff; }
+    .btn-safe    { background: #16a34a; color: #fff; }
+    .btn-danger  { background: #dc2626; color: #fff; }
+    .btn-ghost   { background: #e5e7eb; color: #374151; }
+    .snap {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .snap.best { border-color: #16a34a; border-width: 2px; }
+    .snap-title { font-weight: 600; font-size: 14px; }
+    .badge {
+      display: inline-block;
+      background: #16a34a;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    td { padding: 4px 0; vertical-align: top; }
+    td:first-child { color: #6b7280; padding-right: 10px; white-space: nowrap; }
+    td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+    .keys { font-size: 12px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .empty { color: #9ca3af; font-size: 13px; font-style: italic; }
+    .note { font-size: 12px; color: #6b7280; margin-top: 8px; }
+    details { margin-top: 10px; }
+    summary { cursor: pointer; font-size: 13px; color: #3d8fc4; font-weight: 600; }
+    pre {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 11px;
+      overflow-x: auto;
+      margin-top: 8px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <h1>🛟 Data Recovery</h1>
+  <p class="sub" id="originLine"></p>
+
+  <div id="verdict" class="card banner"></div>
+
+  <div class="card">
+    <h2>1. Save everything first</h2>
+    <p class="note" style="margin-top:0">
+      Downloads every key in this browser's storage, raw and unfiltered. Do this
+      before touching anything else — it cannot make things worse.
+    </p>
+    <button class="btn btn-safe" id="dumpAll">⬇ Download full storage dump</button>
+  </div>
+
+  <div class="card">
+    <h2>2. Recoverable snapshots</h2>
+    <div id="snapshots"></div>
+  </div>
+
+  <div class="card">
+    <h2>3. What's in storage now</h2>
+    <table id="keyTable" class="keys"></table>
+    <details>
+      <summary>Data-loss event log</summary>
+      <pre id="lossLog"></pre>
+    </details>
+  </div>
+
+  <script>
+    // ---- helpers -------------------------------------------------------------
+    var LIVE_KEYS = ['classes', 'studentRates', 'paymentStatus', 'advanceCredits',
+                     'progressNotes', 'deletedStudents', 'defaultRate', 'achievements'];
+
+    function parse(key, fallback) {
+      try {
+        var raw = localStorage.getItem(key);
+        if (raw === null) return fallback;
+        return JSON.parse(raw);
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    function fmtBytes(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+      return (b / 1048576).toFixed(2) + ' MB';
+    }
+
+    function fmtWhen(iso) {
+      if (!iso) return 'unknown date';
+      var d = new Date(iso);
+      if (isNaN(d)) return String(iso);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+    }
+
+    function download(filename, obj) {
+      var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    function today() {
+      var d = new Date();
+      return d.getFullYear() + '-' +
+             String(d.getMonth() + 1).padStart(2, '0') + '-' +
+             String(d.getDate()).padStart(2, '0');
+    }
+
+    // Describe a class list: how many, which students, what date span.
+    function describe(list) {
+      if (!Array.isArray(list) || !list.length) return null;
+      var dates = [], students = {};
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].date) dates.push(list[i].date);
+        if (list[i] && list[i].student) students[list[i].student] = 1;
+      }
+      dates.sort();
+      return {
+        count: list.length,
+        students: Object.keys(students).length,
+        from: dates[0] || '?',
+        to: dates[dates.length - 1] || '?'
+      };
+    }
+
+    // Build a file in the exact shape importData() expects (version 6.0).
+    function toBackupFile(source, classList) {
+      return {
+        exportDate: source.timestamp || new Date().toISOString(),
+        version: '6.0',
+        data: {
+          classes: classList || [],
+          studentRates: source.studentRates || {},
+          paymentStatus: source.paymentStatus || {},
+          advanceCredits: source.advanceCredits || {},
+          progressNotes: source.progressNotes || [],
+          deletedStudents: source.deletedStudents || [],
+          defaultRate: source.defaultRate || 500,
+          achievements: source.achievements || null
+        }
+      };
+    }
+
+    // ---- gather state --------------------------------------------------------
+    var liveClasses = parse('classes', []);
+    var cleanupBackups = parse('cleanupBackups', []);
+    var autoBackups = parse('autoBackups', []);
+    var lossEvents = parse('dataLossEvents', []);
+
+    var totalBytes = 0, keyRows = [];
+    for (var k in localStorage) {
+      if (Object.prototype.hasOwnProperty.call(localStorage, k)) {
+        var size = String(localStorage[k]).length * 2;
+        totalBytes += size;
+        keyRows.push({ key: k, size: size });
+      }
+    }
+    keyRows.sort(function (a, b) { return b.size - a.size; });
+
+    document.getElementById('originLine').textContent = location.origin;
+
+    // ---- verdict -------------------------------------------------------------
+    var candidates = [];
+    cleanupBackups.forEach(function (b, i) {
+      var d = describe(b.allClasses);
+      if (d) candidates.push({ kind: 'cleanup', idx: i, src: b, classes: b.allClasses, info: d });
+    });
+    autoBackups.forEach(function (b, i) {
+      var d = describe(b.classes);
+      if (d) candidates.push({ kind: 'auto', idx: i, src: b, classes: b.classes, info: d });
+    });
+    // Best = most classes recovered.
+    candidates.sort(function (a, b) { return b.info.count - a.info.count; });
+
+    var vEl = document.getElementById('verdict');
+    var best = candidates[0];
+    if (best && best.info.count > liveClasses.length) {
+      vEl.className = 'card banner good';
+      vEl.innerHTML = '<div class="verdict">✅ Recoverable data found</div>' +
+        'Best snapshot holds <strong>' + best.info.count + ' classes</strong> across ' +
+        best.info.students + ' students (' + best.info.from + ' → ' + best.info.to + ').<br>' +
+        'The app currently shows <strong>' + liveClasses.length + '</strong>. ' +
+        'Download the dump above, then use the snapshot below.';
+    } else if (liveClasses.length > 0) {
+      vEl.className = 'card banner warn';
+      vEl.innerHTML = '<div class="verdict">ℹ️ Live data is present</div>' +
+        'The app holds <strong>' + liveClasses.length + ' classes</strong> and no snapshot beats that. ' +
+        'Still download the dump so you have an off-device copy.';
+    } else if (totalBytes < 2048) {
+      vEl.className = 'card banner bad';
+      vEl.innerHTML = '<div class="verdict">❌ Storage is empty</div>' +
+        'Only ' + fmtBytes(totalBytes) + ' in this origin — no data and no snapshots. ' +
+        'Either the browser cleared this site, or the data belongs to a different URL. ' +
+        'Check Chrome history for other <em>*.vercel.app</em> hostnames you used, and open this page there.';
+    } else {
+      vEl.className = 'card banner bad';
+      vEl.innerHTML = '<div class="verdict">⚠️ No classes, but ' + fmtBytes(totalBytes) + ' of storage in use</div>' +
+        'Something is stored here but no usable class snapshot was found. ' +
+        'Download the full dump — it can be inspected manually.';
+    }
+
+    // ---- snapshots ------------------------------------------------------------
+    var snapEl = document.getElementById('snapshots');
+    if (!candidates.length) {
+      snapEl.innerHTML = '<p class="empty">No snapshots containing classes were found in ' +
+        'cleanupBackups or autoBackups.</p>';
+    } else {
+      candidates.forEach(function (c, n) {
+        var d = c.info;
+        var div = document.createElement('div');
+        div.className = 'snap' + (n === 0 ? ' best' : '');
+
+        var label = c.kind === 'cleanup'
+          ? 'Pre-cleanup snapshot #' + (c.idx + 1)
+          : 'Weekly auto-backup #' + (c.idx + 1);
+
+        var rows =
+          '<tr><td>Taken</td><td>' + fmtWhen(c.src.timestamp) + '</td></tr>' +
+          '<tr><td>Classes</td><td><strong>' + d.count + '</strong></td></tr>' +
+          '<tr><td>Students</td><td>' + d.students + '</td></tr>' +
+          '<tr><td>Date span</td><td>' + d.from + ' → ' + d.to + '</td></tr>';
+        if (c.kind === 'cleanup') {
+          rows += '<tr><td>Deleted then</td><td>' + (c.src.classesRemoved || 0) +
+                  ' (cutoff ' + (c.src.cutoffDate || '?') + ')</td></tr>';
+        }
+
+        div.innerHTML =
+          '<div class="snap-title">' + label +
+          (n === 0 ? '<span class="badge">BEST</span>' : '') + '</div>' +
+          '<table>' + rows + '</table>';
+
+        var dl = document.createElement('button');
+        dl.className = 'btn btn-primary';
+        dl.textContent = '⬇ Download as backup file';
+        dl.addEventListener('click', function () {
+          download('mindful-maths-recovered-' + d.count + 'classes-' + today() + '.json',
+                   toBackupFile(c.src, c.classes));
+        });
+        div.appendChild(dl);
+
+        var rs = document.createElement('button');
+        rs.className = 'btn btn-danger';
+        rs.textContent = '↻ Restore this into the app';
+        rs.addEventListener('click', function () { restore(c); });
+        div.appendChild(rs);
+
+        snapEl.appendChild(div);
+      });
+
+      var hint = document.createElement('p');
+      hint.className = 'note';
+      hint.textContent = 'Download first. "Restore" overwrites live data, and it only ' +
+        'sticks once the automatic 3-month cleanup is disabled in the app.';
+      snapEl.appendChild(hint);
+    }
+
+    function restore(c) {
+      var d = c.info;
+      if (!confirm('Restore ' + d.count + ' classes (' + d.from + ' → ' + d.to + ')?\n\n' +
+                   'This overwrites the app\'s current data.\n\n' +
+                   'A backup file will download first.')) return;
+
+      // Always save a copy of the current state before overwriting it.
+      download('mindful-maths-before-restore-' + today() + '.json', {
+        exportDate: new Date().toISOString(),
+        version: 'raw-pre-restore',
+        data: rawDump()
+      });
+
+      var f = toBackupFile(c.src, c.classes).data;
+      try {
+        localStorage.setItem('classes', JSON.stringify(f.classes));
+        localStorage.setItem('studentRates', JSON.stringify(f.studentRates));
+        localStorage.setItem('paymentStatus', JSON.stringify(f.paymentStatus));
+        localStorage.setItem('advanceCredits', JSON.stringify(f.advanceCredits));
+        localStorage.setItem('progressNotes', JSON.stringify(f.progressNotes));
+        localStorage.setItem('deletedStudents', JSON.stringify(f.deletedStudents));
+        localStorage.setItem('defaultRate', f.defaultRate);
+        if (f.achievements) {
+          localStorage.setItem('achievements', JSON.stringify(f.achievements));
+        }
+        alert('Restored ' + f.classes.length + ' classes.\n\n' +
+              'Open the app to check. If they disappear again, the 3-month ' +
+              'cleanup is still active and needs the code fix deployed.');
+        location.reload();
+      } catch (e) {
+        alert('Restore failed: ' + e.name + '\n\n' + e.message +
+              '\n\nYour downloaded file is still safe.');
+      }
+    }
+
+    // ---- raw dump ------------------------------------------------------------
+    function rawDump() {
+      var out = {};
+      for (var k in localStorage) {
+        if (Object.prototype.hasOwnProperty.call(localStorage, k)) {
+          out[k] = localStorage.getItem(k);
+        }
+      }
+      return out;
+    }
+
+    document.getElementById('dumpAll').addEventListener('click', function () {
+      download('mm-storage-dump-' + location.hostname + '-' + today() + '.json', {
+        dumpedAt: new Date().toISOString(),
+        origin: location.origin,
+        userAgent: navigator.userAgent,
+        totalBytes: totalBytes,
+        raw: rawDump()
+      });
+    });
+
+    // ---- storage table -------------------------------------------------------
+    var tbl = document.getElementById('keyTable');
+    if (!keyRows.length) {
+      tbl.innerHTML = '<tr><td colspan="2" class="empty">Storage is completely empty.</td></tr>';
+    } else {
+      var html = '';
+      keyRows.forEach(function (r) {
+        html += '<tr><td>' + r.key + '</td><td>' + fmtBytes(r.size) + '</td></tr>';
+      });
+      html += '<tr><td><strong>Total</strong></td><td><strong>' +
+              fmtBytes(totalBytes) + '</strong></td></tr>';
+      tbl.innerHTML = html;
+    }
+
+    document.getElementById('lossLog').textContent = lossEvents.length
+      ? JSON.stringify(lossEvents, null, 2)
+      : 'No data-loss events recorded.';
+  </script>
+</body>
+</html>

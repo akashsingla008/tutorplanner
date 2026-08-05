@@ -20,6 +20,24 @@ function safeJsonParse(key, defaultValue) {
   }
 }
 
+// Write to localStorage without letting a quota error abort the caller.
+// Returns true on success. A failed write used to throw out of saveClasses()
+// and abort init() midway, leaving data half-persisted.
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    return true;
+  } catch (e) {
+    console.error(`Failed to write localStorage key "${key}":`, e);
+    if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      showToast('⚠️ Storage full - changes could NOT be saved! Export a backup now.', 12000);
+    } else {
+      showToast('⚠️ Could not save changes. Export a backup now.', 12000);
+    }
+    return false;
+  }
+}
+
 // Request persistent storage to prevent browser from auto-evicting data
 async function requestPersistentStorage() {
   if (navigator.storage && navigator.storage.persist) {
@@ -129,13 +147,16 @@ function init() {
   checkAndRecoverData();
   migrateClassesToDateFormat();
   fixTimezoneShiftedDates(); // Fix dates that were shifted due to UTC timezone bug
+  // Snapshot BEFORE any pruning, so a backup can never capture post-deletion
+  // state. Previously this ran after cleanupOldClasses(), which meant every
+  // automatic backup recorded data that had already been trimmed.
+  checkAndCreateBackup();
   cleanupOldClasses();
   applyAdvanceCreditsToCompletedClasses(); // Auto-apply credits to completed classes
   renderWeekGrid();
   setupEventListeners();
   updateStudentDropdowns();
   checkForClashes();
-  checkAndCreateBackup();
   initNotifications();
   startClassReminderCheck();
   startEndOfDayReminderCheck();
@@ -143,11 +164,48 @@ function init() {
   initProgressView();
 }
 
+// Apply a snapshot into the live globals and persist it.
+// One implementation for every restore path, so a newly added data key can
+// never be wired into some of them and silently forgotten in the others -
+// which is how `deletedStudents` came to be missing from cleanup snapshots.
+//
+// replaceAll=false (auto-recovery): a key absent from the snapshot keeps its
+//   current in-memory value, so partial snapshots don't destroy good data.
+// replaceAll=true (explicit user restore / file import): an absent key resets
+//   to empty, because the user asked to replace everything.
+function applyRecoveredData(source, classList, replaceAll = false) {
+  const fallback = (value, current, empty) => {
+    if (value) return value;
+    return replaceAll ? empty : current;
+  };
+
+  classes = classList || [];
+  studentRates = fallback(source.studentRates, studentRates, {});
+  paymentStatus = fallback(source.paymentStatus, paymentStatus, {});
+  advanceCredits = fallback(source.advanceCredits, advanceCredits, {});
+  progressNotes = fallback(source.progressNotes, progressNotes, []);
+  deletedStudents = fallback(source.deletedStudents, deletedStudents, []);
+  defaultRate = source.defaultRate || (replaceAll ? 500 : defaultRate);
+  if (source.achievements) {
+    achievements = source.achievements;
+  }
+
+  saveClasses();
+  safeSetItem('studentRates', JSON.stringify(studentRates));
+  safeSetItem('paymentStatus', JSON.stringify(paymentStatus));
+  safeSetItem('advanceCredits', JSON.stringify(advanceCredits));
+  safeSetItem('progressNotes', JSON.stringify(progressNotes));
+  safeSetItem('deletedStudents', JSON.stringify(deletedStudents));
+  safeSetItem('defaultRate', defaultRate);
+  safeSetItem('achievements', JSON.stringify(achievements));
+}
+
 // Auto-recover data if classes array is empty but backups exist
 function checkAndRecoverData() {
   // Log data status for debugging
   const dataStatus = {
     classesCount: classes.length,
+    hasLastKnownGood: !!localStorage.getItem('lastKnownGood'),
     hasAutoBackups: safeJsonParse('autoBackups', []).length > 0,
     hasCleanupBackups: safeJsonParse('cleanupBackups', []).length > 0,
     timestamp: new Date().toISOString()
@@ -158,66 +216,27 @@ function checkAndRecoverData() {
     const lossEvents = safeJsonParse('dataLossEvents', []);
     lossEvents.unshift(dataStatus);
     // Keep only last 10 events
-    localStorage.setItem('dataLossEvents', JSON.stringify(lossEvents.slice(0, 10)));
+    safeSetItem('dataLossEvents', JSON.stringify(lossEvents.slice(0, 10)));
   }
 
   if (classes.length > 0) return; // Data exists, no recovery needed
 
-  // Try to recover from auto backups first
-  const autoBackups = safeJsonParse('autoBackups', []);
-  if (autoBackups.length > 0 && autoBackups[0].classes && autoBackups[0].classes.length > 0) {
-    const backup = autoBackups[0];
-    classes = backup.classes;
-    studentRates = backup.studentRates || studentRates;
-    paymentStatus = backup.paymentStatus || paymentStatus;
-    advanceCredits = backup.advanceCredits || advanceCredits;
-    progressNotes = backup.progressNotes || progressNotes;
-    deletedStudents = backup.deletedStudents || deletedStudents;
-    defaultRate = backup.defaultRate || defaultRate;
-    if (backup.achievements) {
-      achievements = backup.achievements;
+  // Candidate sources, freshest and most complete first. `lastKnownGood` is
+  // written by saveClasses() the instant a write would shrink the class list,
+  // so it is the closest thing to the state just before the loss.
+  const lastKnownGood = safeJsonParse('lastKnownGood', null);
+  const sources = [
+    { snapshot: lastKnownGood, classList: lastKnownGood && lastKnownGood.classes, label: 'last known good' },
+    ...safeJsonParse('autoBackups', []).map(b => ({ snapshot: b, classList: b.classes, label: 'daily backup' })),
+    ...safeJsonParse('cleanupBackups', []).map(b => ({ snapshot: b, classList: b.allClasses, label: 'cleanup snapshot' }))
+  ];
+
+  for (const source of sources) {
+    if (source.snapshot && Array.isArray(source.classList) && source.classList.length > 0) {
+      applyRecoveredData(source.snapshot, source.classList);
+      showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from ${source.label}.`, 12000);
+      return;
     }
-
-    // Save recovered data
-    saveClasses();
-    localStorage.setItem('studentRates', JSON.stringify(studentRates));
-    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
-    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
-    localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
-    localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
-    localStorage.setItem('defaultRate', defaultRate);
-    localStorage.setItem('achievements', JSON.stringify(achievements));
-
-    showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
-    return;
-  }
-
-  // Try cleanup backups if no auto backups
-  const cleanupBackups = safeJsonParse('cleanupBackups', []);
-  if (cleanupBackups.length > 0 && cleanupBackups[0].allClasses && cleanupBackups[0].allClasses.length > 0) {
-    const backup = cleanupBackups[0];
-    classes = backup.allClasses;
-    studentRates = backup.studentRates || studentRates;
-    paymentStatus = backup.paymentStatus || paymentStatus;
-    advanceCredits = backup.advanceCredits || advanceCredits;
-    progressNotes = backup.progressNotes || progressNotes;
-    deletedStudents = backup.deletedStudents || deletedStudents;
-    defaultRate = backup.defaultRate || defaultRate;
-    if (backup.achievements) {
-      achievements = backup.achievements;
-    }
-
-    // Save recovered data
-    saveClasses();
-    localStorage.setItem('studentRates', JSON.stringify(studentRates));
-    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
-    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
-    localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
-    localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
-    localStorage.setItem('defaultRate', defaultRate);
-    localStorage.setItem('achievements', JSON.stringify(achievements));
-
-    showToast(`⚠️ Data was lost! Recovered ${classes.length} classes from backup.`, 10000);
   }
 }
 
@@ -327,23 +346,55 @@ function forceFixTimezoneShiftedDates() {
   return fixedCount;
 }
 
-// Clean up classes older than 3 months (with automatic backup)
+// Retention window for old classes, in months. Only ever applied under real
+// storage pressure - see cleanupOldClasses().
+const CLASS_RETENTION_MONTHS = 24;
+// Only consider pruning once storage is this full (percent).
+const CLEANUP_PRESSURE_THRESHOLD = 80;
+
+// Prune very old classes, but ONLY when storage is genuinely running out and
+// only with the user's explicit consent.
+//
+// History: this used to delete every class older than 3 months on every single
+// app launch, silently and unconditionally. A tutor who did not open the app
+// for a few months would return to find their entire billing history gone -
+// which is exactly what happened in Aug 2026. Class records cost ~200 bytes
+// each, so a 5 MB budget holds roughly 20,000 classes: there was never any
+// space pressure to justify deleting anything.
 function cleanupOldClasses() {
-  const threeMonthsAgo = new Date();
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-  const cutoffDate = formatDateToYYYYMMDD(threeMonthsAgo);
+  // Gate 1: no storage pressure, no pruning. This is the normal path.
+  const usedPercent = getStoragePercentage();
+  if (usedPercent < CLEANUP_PRESSURE_THRESHOLD) {
+    return;
+  }
+
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - CLASS_RETENTION_MONTHS);
+  const cutoffDate = formatDateToYYYYMMDD(cutoff);
 
   // Find old classes
   const oldClasses = classes.filter(cls => cls.date && cls.date < cutoffDate);
 
   if (oldClasses.length === 0) {
-    return; // Nothing to clean up
+    return; // Nothing old enough to remove
+  }
+
+  // Gate 2: never delete without asking.
+  const proceed = confirm(
+    `Storage is ${Math.round(usedPercent)}% full.\n\n` +
+    `Remove ${oldClasses.length} class${oldClasses.length !== 1 ? 'es' : ''} older than ` +
+    `${CLASS_RETENTION_MONTHS} months (before ${cutoffDate})?\n\n` +
+    `A snapshot is kept, but please export a backup first to be safe.\n\n` +
+    `Choose Cancel to keep everything.`
+  );
+  if (!proceed) {
+    return;
   }
 
   // Create backup before cleanup
   const cleanupBackup = {
     timestamp: new Date().toISOString(),
-    reason: 'auto-cleanup-3months',
+    reason: `storage-pressure-cleanup-${CLASS_RETENTION_MONTHS}months`,
     cutoffDate: cutoffDate,
     classesRemoved: oldClasses.length,
     classes: oldClasses,
@@ -352,6 +403,7 @@ function cleanupOldClasses() {
     paymentStatus: paymentStatus,
     advanceCredits: advanceCredits,
     progressNotes: progressNotes,
+    deletedStudents: deletedStudents,
     defaultRate: defaultRate,
     achievements: achievements
   };
@@ -359,13 +411,14 @@ function cleanupOldClasses() {
   // Store cleanup backup separately
   let cleanupBackups = safeJsonParse('cleanupBackups', []);
   cleanupBackups.unshift(cleanupBackup);
-  // Keep only last 6 cleanup backups (covering 18 months of history)
+  // Keep only last 6 cleanup backups
   cleanupBackups = cleanupBackups.slice(0, 6);
-  localStorage.setItem('cleanupBackups', JSON.stringify(cleanupBackups));
+  safeSetItem('cleanupBackups', JSON.stringify(cleanupBackups));
 
   // Remove old classes
   classes = classes.filter(cls => !cls.date || cls.date >= cutoffDate);
   saveClasses();
+  showToast(`Removed ${oldClasses.length} classes older than ${CLASS_RETENTION_MONTHS} months.`, 6000);
 }
 
 // Auto-apply advance credits to completed unpaid classes (globally)
@@ -405,8 +458,8 @@ function applyAdvanceCreditsToCompletedClasses() {
 
   // Save only if changes were made
   if (dataChanged) {
-    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
-    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
+    safeSetItem('paymentStatus', JSON.stringify(paymentStatus));
+    safeSetItem('advanceCredits', JSON.stringify(advanceCredits));
   }
 
   return creditsApplied;
@@ -619,7 +672,7 @@ function setupEventListeners() {
     }
 
     defaultRate = newRate;
-    localStorage.setItem('defaultRate', defaultRate);
+    safeSetItem('defaultRate', defaultRate);
     renderReport();
   });
 
@@ -1223,7 +1276,10 @@ function handleDrop(e) {
 }
 
 // Toast notification
-function showToast(message) {
+// duration is in milliseconds. Call sites throughout the app already pass one
+// (e.g. the data-loss warning asks for 10000), but it used to be ignored and
+// every toast vanished after 2s - including warnings you needed time to read.
+function showToast(message, duration = 2000) {
   // Remove existing toast
   const existingToast = document.querySelector(".toast");
   if (existingToast) {
@@ -1253,7 +1309,7 @@ function showToast(message) {
     toast.style.opacity = "0";
     toast.style.transition = "opacity 0.3s";
     setTimeout(() => toast.remove(), 300);
-  }, 2000);
+  }, duration);
 }
 
 // Find clashing classes within a day (ignoring cancelled classes and allowed clashes)
@@ -2157,7 +2213,7 @@ function handleDeleteStudent(student) {
 
   if (confirmed) {
     deletedStudents.push(student);
-    localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
+    safeSetItem('deletedStudents', JSON.stringify(deletedStudents));
     updateStudentDropdowns();
     renderReport();
     renderWeekGrid();
@@ -2167,7 +2223,35 @@ function handleDeleteStudent(student) {
 
 // Utility Functions
 function saveClasses() {
-  localStorage.setItem("classes", JSON.stringify(classes));
+  // Safety net: if this write would wipe out the class list or more than half
+  // of it, stash what is currently stored first. Recovers from any bug that
+  // empties `classes` before saving - which is how the Aug 2026 loss happened.
+  try {
+    const previousRaw = localStorage.getItem("classes");
+    if (previousRaw) {
+      const previous = JSON.parse(previousRaw);
+      if (Array.isArray(previous) && previous.length > 0 &&
+          classes.length < Math.ceil(previous.length / 2)) {
+        safeSetItem('lastKnownGood', {
+          timestamp: new Date().toISOString(),
+          reason: `class count dropped ${previous.length} -> ${classes.length}`,
+          classes: previous,
+          studentRates: studentRates,
+          paymentStatus: paymentStatus,
+          advanceCredits: advanceCredits,
+          progressNotes: progressNotes,
+          deletedStudents: deletedStudents,
+          defaultRate: defaultRate,
+          achievements: achievements
+        });
+        console.warn(`saveClasses: large drop ${previous.length} -> ${classes.length}, stashed lastKnownGood`);
+      }
+    }
+  } catch (e) {
+    console.error('saveClasses: could not stash lastKnownGood', e);
+  }
+
+  safeSetItem("classes", JSON.stringify(classes));
   // Clear selection to prevent stale indices after class modifications
   selectedClasses.clear();
 }
@@ -2733,7 +2817,7 @@ function renderReport() {
         }
 
         studentRates[student] = newRate;
-        localStorage.setItem('studentRates', JSON.stringify(studentRates));
+        safeSetItem('studentRates', JSON.stringify(studentRates));
         renderReport();
       });
     });
@@ -3498,7 +3582,7 @@ function showMarkPaidDialog(student, classIds) {
       paymentStatus[classId] = cb.checked;
       if (cb.checked && !wasChecked) newPaymentsCount++;
     });
-    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    safeSetItem('paymentStatus', JSON.stringify(paymentStatus));
     closeMarkPaidDialog();
 
     // Celebrate if new payments were marked
@@ -3624,7 +3708,7 @@ function showAdvancePaymentDialog(student, classIds) {
       paymentStatus[classId] = cb.checked;
       if (cb.checked && !wasChecked) newAdvanceCount++;
     });
-    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    safeSetItem('paymentStatus', JSON.stringify(paymentStatus));
     closeAdvancePaymentDialog();
 
     if (newAdvanceCount > 0) {
@@ -3782,7 +3866,7 @@ function showAddCreditDialog(student) {
       delete advanceCredits[student];
     }
 
-    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
+    safeSetItem('advanceCredits', JSON.stringify(advanceCredits));
     closeAddCreditDialog();
 
     // Auto-apply credit to any completed unpaid classes
@@ -3980,7 +4064,7 @@ function showClassActionDialog(classId, student) {
 
     // Clear payment status for this class
     delete paymentStatus[classId];
-    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
+    safeSetItem('paymentStatus', JSON.stringify(paymentStatus));
 
     saveClasses();
     closeClassActionDialog();
@@ -4101,7 +4185,7 @@ function generateNoteId() {
 
 // Save progress notes to localStorage
 function saveProgressNotes() {
-  localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
+  safeSetItem('progressNotes', JSON.stringify(progressNotes));
 }
 
 // Update progress student dropdown
@@ -5085,7 +5169,12 @@ function initProgressView() {
 
 // ==================== BACKUP FUNCTIONS ====================
 
-// Check and create automatic backup (weekly)
+// How many automatic snapshots to retain. A snapshot of a few hundred classes
+// is tens of KB against a 5 MB budget, so depth is cheap - far cheaper than
+// discovering the only two snapshots you kept are both bad.
+const AUTO_BACKUP_SLOTS = 10;
+
+// Check and create automatic backup (daily)
 function checkAndCreateBackup() {
   const lastBackupDate = localStorage.getItem('lastBackupDate');
   const now = new Date();
@@ -5093,14 +5182,28 @@ function checkAndCreateBackup() {
     ? Math.floor((now - new Date(lastBackupDate)) / (1000 * 60 * 60 * 24))
     : 999;
 
-  // Create backup if more than 7 days since last backup
-  if (daysSinceBackup >= 7) {
+  // Create backup if a day or more has passed
+  if (daysSinceBackup >= 1) {
     createAutoBackup();
   }
 }
 
 // Create automatic backup
 function createAutoBackup() {
+  // Never snapshot an empty class list. An empty snapshot is worthless, and
+  // pushing one would roll a good snapshot off the end of the list.
+  if (!classes.length) {
+    console.warn('createAutoBackup: skipped, no classes to snapshot');
+    return;
+  }
+
+  // Don't make a full-storage situation worse.
+  if (getStoragePercentage() >= 90) {
+    console.warn('createAutoBackup: skipped, storage above 90%');
+    showToast('⚠️ Storage almost full - please export a backup.', 10000);
+    return;
+  }
+
   const backupData = {
     timestamp: new Date().toISOString(),
     classes: classes,
@@ -5119,11 +5222,11 @@ function createAutoBackup() {
   // Add new backup
   backups.unshift(backupData);
 
-  // Keep only last 2 backups to save storage space
-  backups = backups.slice(0, 2);
+  backups = backups.slice(0, AUTO_BACKUP_SLOTS);
 
-  localStorage.setItem('autoBackups', JSON.stringify(backups));
-  localStorage.setItem('lastBackupDate', new Date().toISOString());
+  if (safeSetItem('autoBackups', JSON.stringify(backups))) {
+    safeSetItem('lastBackupDate', new Date().toISOString());
+  }
 }
 
 // Export data to JSON file
@@ -5171,28 +5274,8 @@ function importData(file) {
 
       // Confirm before overwriting
       if (confirm(`This will replace all current data with the backup from ${new Date(importedData.exportDate).toLocaleDateString()}. Continue?`)) {
-        // Import the data
-        classes = importedData.data.classes || [];
-        studentRates = importedData.data.studentRates || {};
-        paymentStatus = importedData.data.paymentStatus || {};
-        advanceCredits = importedData.data.advanceCredits || {};
-        progressNotes = importedData.data.progressNotes || [];
-        deletedStudents = importedData.data.deletedStudents || [];
-        defaultRate = importedData.data.defaultRate || 500;
-        // Import achievements if present (backwards compatible with older backups)
-        if (importedData.data.achievements) {
-          achievements = importedData.data.achievements;
-        }
-
-        // Save to localStorage
-        saveClasses();
-        localStorage.setItem('studentRates', JSON.stringify(studentRates));
-        localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
-        localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
-        localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
-        localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
-        localStorage.setItem('defaultRate', defaultRate);
-        localStorage.setItem('achievements', JSON.stringify(achievements));
+        // Import the data (replaceAll: the user asked to replace everything)
+        applyRecoveredData(importedData.data, importedData.data.classes, true);
 
         // Migrate imported classes to include date field if missing
         migrateClassesToDateFormat();
@@ -5399,27 +5482,8 @@ function restoreAutoBackup(index) {
 
   const date = new Date(backup.timestamp);
   if (confirm(`Restore backup from ${date.toLocaleDateString()} ${date.toLocaleTimeString()}? This will replace all current data.`)) {
-    classes = backup.classes || [];
-    studentRates = backup.studentRates || {};
-    paymentStatus = backup.paymentStatus || {};
-    advanceCredits = backup.advanceCredits || {};
-    progressNotes = backup.progressNotes || [];
-    deletedStudents = backup.deletedStudents || [];
-    defaultRate = backup.defaultRate || 500;
-    // Restore achievements if present (backwards compatible with older backups)
-    if (backup.achievements) {
-      achievements = backup.achievements;
-    }
-
-    // Save to localStorage
-    saveClasses();
-    localStorage.setItem('studentRates', JSON.stringify(studentRates));
-    localStorage.setItem('paymentStatus', JSON.stringify(paymentStatus));
-    localStorage.setItem('advanceCredits', JSON.stringify(advanceCredits));
-    localStorage.setItem('progressNotes', JSON.stringify(progressNotes));
-    localStorage.setItem('deletedStudents', JSON.stringify(deletedStudents));
-    localStorage.setItem('defaultRate', defaultRate);
-    localStorage.setItem('achievements', JSON.stringify(achievements));
+    // replaceAll: the confirm dialog told the user this replaces all data
+    applyRecoveredData(backup, backup.classes, true);
 
     // Migrate imported classes to include date field if missing
     migrateClassesToDateFormat();
@@ -6521,7 +6585,7 @@ function closeAchievementsModal() {
 
 // Save achievements
 function saveAchievements() {
-  localStorage.setItem('achievements', JSON.stringify(achievements));
+  safeSetItem('achievements', JSON.stringify(achievements));
 }
 
 // Check all badges based on current state

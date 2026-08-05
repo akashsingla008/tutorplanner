@@ -1,0 +1,6 @@
+# Exported app data. Contains student names, rates and payment history -
+# this repository is public, so these must never be committed.
+mindful-maths-backup-*.json
+mindful-maths-recovered-*.json
+mindful-maths-before-restore-*.json
+mm-storage-dump-*.json

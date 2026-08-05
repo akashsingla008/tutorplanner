@@ -1,11 +1,12 @@
-const CACHE_NAME = "mindful-maths-v117";
+const CACHE_NAME = "mindful-maths-v118";
 
 const FILES_TO_CACHE = [
   "/",
   "/index.html",
   "/style.css",
   "/app.js",
-  "/manifest.json"
+  "/manifest.json",
+  "/recover.html"
 ];
 
 self.addEventListener("install", event => {
