@@ -3029,13 +3029,29 @@ function updateCreditSummaryCard() {
     return a.student.localeCompare(b.student);
   });
 
+  // A student stays in this list forever once any class has been paid from
+  // credit, because the list is built from historical credit use as well as
+  // current balances. Students whose classes have stopped therefore pile up.
+  //
+  // Move them out of the main list, but only when there is nothing left owed:
+  // a remaining balance is classes still due, and must never be hidden.
+  // deletedStudents can contain duplicates, hence the Set.
+  const removedStudents = new Set(deletedStudents);
+  const activeCredits = studentCredits.filter(
+    s => s.creditRemaining > 0 || !removedStudents.has(s.student)
+  );
+  const pastCredits = studentCredits.filter(
+    s => s.creditRemaining === 0 && removedStudents.has(s.student)
+  );
+  const pastUsedTotal = pastCredits.reduce((sum, s) => sum + s.creditUsed, 0);
+
   if (studentCredits.length > 0) {
     creditSection.style.display = 'block';
     creditBalanceEl.textContent = `₹${totalCredit.toLocaleString()} remaining`;
     freeClassesEl.textContent = `${totalFreeClasses} free class${totalFreeClasses !== 1 ? 'es' : ''} remaining`;
 
     // Render per-student breakdown
-    studentListEl.innerHTML = studentCredits.map(s => `
+    const renderCreditRow = (s) => `
       <div class="credit-student-row ${s.creditRemaining === 0 ? 'exhausted' : ''}">
         <div class="credit-student-name">${escapeHtml(s.student)}</div>
         <div class="credit-student-details">
@@ -3063,7 +3079,19 @@ function updateCreditSummaryCard() {
           </button>
         </div>
       </div>
-    `).join('');
+    `;
+
+    // Collapsed rather than dropped, so the record of who used credit survives.
+    // <details> keeps this CSP-safe with no extra JS.
+    const pastHtml = pastCredits.length ? `
+      <details class="credit-past">
+        <summary>${pastCredits.length} past student${pastCredits.length !== 1 ? 's' : ''}
+          &middot; ₹${pastUsedTotal.toLocaleString()} used historically</summary>
+        <div class="credit-past-list">${pastCredits.map(renderCreditRow).join('')}</div>
+      </details>
+    ` : '';
+
+    studentListEl.innerHTML = activeCredits.map(renderCreditRow).join('') + pastHtml;
 
     // Add event listeners to share buttons
     studentListEl.querySelectorAll('.credit-share-btn').forEach(btn => {

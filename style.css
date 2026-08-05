@@ -5667,3 +5667,37 @@ textarea.share-preview-content:focus {
   color: #6b7280;
   font-size: 0.75rem;
 }
+
+/* Past students in the credit summary - collapsed, not discarded */
+.credit-past {
+  margin-top: 8px;
+  border-top: 1px dashed rgba(22, 101, 52, 0.25);
+  padding-top: 8px;
+}
+
+.credit-past > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: #166534;
+  opacity: 0.75;
+  padding: 4px 2px;
+  list-style-position: inside;
+}
+
+.credit-past > summary:hover {
+  opacity: 1;
+}
+
+.credit-past[open] > summary {
+  margin-bottom: 8px;
+}
+
+.credit-past-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.credit-past-list .credit-student-row {
+  opacity: 0.7;
+}
