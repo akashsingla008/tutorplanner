@@ -5775,6 +5775,49 @@ async function verifyCloudBackup() {
   }
 }
 
+// Pull the stored copy down as a file, without applying it to the device.
+// Verification by inspection: the download is an ordinary v7.0 export, so it
+// can be opened, read, and imported through the normal Choose Backup File
+// route - which is the real proof that the cloud copy would restore.
+async function downloadCloudBackup(day) {
+  if (!isSyncEnabled()) {
+    showToast('Cloud backup is not set up yet.', 5000);
+    return;
+  }
+  try {
+    const url = day ? `${SYNC_ENDPOINT}?day=${encodeURIComponent(day)}` : SYNC_ENDPOINT;
+    const response = await fetch(url, { headers: { 'x-mm-token': getSyncToken() } });
+
+    if (response.status === 404) {
+      showToast(day ? `No snapshot stored for ${day}.` : 'No cloud backup stored yet.', 7000);
+      return;
+    }
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      showToast(`Could not download: ${detail.error || response.status}`, 8000);
+      return;
+    }
+
+    const payload = await response.json();
+    const count = (payload.data && payload.data.classes || []).length;
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = `mindful-maths-cloud-${day || formatDateToYYYYMMDD(new Date())}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
+
+    showToast(`Downloaded the cloud copy - ${count} classes.`, 7000);
+  } catch (error) {
+    console.warn('downloadCloudBackup failed', error);
+    showToast('Could not reach the cloud backup.', 6000);
+  }
+}
+
 // The last few days kept server-side, newest first.
 async function fetchCloudDays() {
   if (!isSyncEnabled()) return [];
@@ -6403,16 +6446,21 @@ async function showBackupDialog() {
         ${syncOn ? `
         <button class="btn btn-primary" id="cloudPushBtn">Back up now</button>
         <button class="btn btn-secondary" id="cloudVerifyBtn">🔍 Verify what is stored</button>
+        <button class="btn btn-secondary" id="cloudDownloadBtn">⬇ Download cloud copy</button>
         <button class="btn btn-secondary" id="cloudPullBtn">Restore latest</button>
         ${cloudDays.length ? `
         <div class="cloud-days">
           <p class="cloud-days-label">Or restore a specific day (last ${cloudDays.length} kept):</p>
           <div class="cloud-days-list" id="cloudDaysList">
             ${cloudDays.map(entry => `
-              <button type="button" class="cloud-day-item" data-day="${escapeHtml(entry.day)}">
-                <span class="cloud-day-date">${escapeHtml(entry.day)}</span>
-                <span class="cloud-day-meta">${entry.classes} classes${entry.expenses ? ` &middot; ${entry.expenses} expenses` : ''}</span>
-              </button>`).join('')}
+              <div class="cloud-day-row">
+                <button type="button" class="cloud-day-item" data-day="${escapeHtml(entry.day)}">
+                  <span class="cloud-day-date">${escapeHtml(entry.day)}</span>
+                  <span class="cloud-day-meta">${entry.classes} classes${entry.expenses ? ` &middot; ${entry.expenses} expenses` : ''}</span>
+                </button>
+                <button type="button" class="cloud-day-download" data-day="${escapeHtml(entry.day)}"
+                        title="Download this day" aria-label="Download ${escapeHtml(entry.day)}">⬇</button>
+              </div>`).join('')}
           </div>
         </div>` : ''}
         <button class="btn btn-secondary" id="disableSyncBtn">Turn off</button>` : ''}
@@ -6513,11 +6561,17 @@ async function showBackupDialog() {
   });
   document.getElementById('cloudPushBtn')?.addEventListener('click', () => pushToCloud(true));
   document.getElementById('cloudVerifyBtn')?.addEventListener('click', verifyCloudBackup);
+  document.getElementById('cloudDownloadBtn')?.addEventListener('click', () => downloadCloudBackup(null));
   document.getElementById('cloudPullBtn')?.addEventListener('click', async () => {
     await pullFromCloud(true);
     closeBackupDialog();
   });
   document.getElementById('cloudDaysList')?.addEventListener('click', async (e) => {
+    const downloadBtn = e.target.closest('.cloud-day-download');
+    if (downloadBtn) {
+      downloadCloudBackup(downloadBtn.dataset.day);
+      return;
+    }
     const dayBtn = e.target.closest('.cloud-day-item');
     if (!dayBtn) return;
     const result = await pullFromCloud(true, dayBtn.dataset.day);

@@ -4,3 +4,4 @@ mindful-maths-backup-*.json
 mindful-maths-recovered-*.json
 mindful-maths-before-restore-*.json
 mm-storage-dump-*.json
+mindful-maths-cloud-*.json

@@ -5953,3 +5953,32 @@ textarea.share-preview-content:focus {
   cursor: pointer;
   padding: 4px;
 }
+
+.cloud-day-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.cloud-day-row .cloud-day-item {
+  flex: 1 1 auto;
+}
+
+.cloud-day-download {
+  flex: 0 0 auto;
+  width: 38px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #3d8fc4;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cloud-day-download:active {
+  background: #3d8fc4;
+  border-color: #3d8fc4;
+  color: #fff;
+}
