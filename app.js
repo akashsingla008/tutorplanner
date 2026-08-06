@@ -5289,6 +5289,305 @@ function initProgressView() {
   });
 }
 
+// ==================== DATA HEALTH CHECK ====================
+// Reports oddities in the stored data and changes nothing. Every finding is
+// something only the tutor can judge - whether a student was removed by
+// mistake, whether a rate is wrong, whether a payment record without a class
+// still represents money received. Auto-"tidying" financial records would
+// destroy exactly the history that makes them worth keeping.
+
+// Payment keys are student_date_start_end. Student names can contain spaces,
+// so take the last three segments rather than splitting from the left.
+function parsePaymentKey(key) {
+  const parts = String(key).split('_');
+  if (parts.length < 4) return null;
+  const end = parts.pop();
+  const start = parts.pop();
+  const date = parts.pop();
+  const student = parts.join('_');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return null;
+  return { student, date, start, end };
+}
+
+function runDataHealthCheck() {
+  const findings = [];
+  const clean = [];
+  const add = (level, title, summary, items) =>
+    findings.push({ level, title, summary, items: items || [] });
+
+  const classIds = new Set(classes.map(getClassPaymentId));
+  const activeStudents = new Set(classes.map(c => c.student));
+  const removed = new Set(deletedStudents);
+  const today = formatDateToYYYYMMDD(new Date());
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const recentCutoff = formatDateToYYYYMMDD(cutoff);
+
+  // 1. Payment records whose class no longer exists
+  const orphans = Object.keys(paymentStatus).filter(k => !classIds.has(k));
+  if (orphans.length) {
+    const byMonth = {};
+    let value = 0;
+    const rows = [];
+    orphans.forEach(key => {
+      const parsed = parsePaymentKey(key);
+      if (!parsed) { rows.push({ label: key, note: 'unparseable key' }); return; }
+      const month = parsed.date.slice(0, 7);
+      byMonth[month] = (byMonth[month] || 0) + 1;
+      const rate = studentRates[parsed.student] || defaultRate;
+      const amount = Math.round(getMinutesBetween(parsed.start, parsed.end) / 60 * rate);
+      value += amount;
+      rows.push({
+        label: `${parsed.date}  ${parsed.start}-${parsed.end}  ${parsed.student}`,
+        note: `₹${amount.toLocaleString()} · ${paymentStatus[key] === 'credit' ? 'from credit' : 'paid'}`
+      });
+    });
+    const months = Object.keys(byMonth).sort().map(m => `${m}: ${byMonth[m]}`).join(' · ');
+    add('warn', `${orphans.length} payment records with no matching class`,
+      `${months}. Roughly ₹${value.toLocaleString()} of billed classes. ` +
+      `These are usually classes removed by the old 3-month cleanup - the payment survived, the lesson record did not.`,
+      rows);
+  } else {
+    clean.push('Every payment record matches a class');
+  }
+
+  // 2. Removed students still teaching recently
+  const recentlyActive = {};
+  classes.forEach(c => {
+    if (removed.has(c.student) && c.date >= recentCutoff) {
+      if (!recentlyActive[c.student]) recentlyActive[c.student] = [];
+      recentlyActive[c.student].push(c.date);
+    }
+  });
+  const recentNames = Object.keys(recentlyActive);
+  if (recentNames.length) {
+    add('warn', `${recentNames.length} removed student${recentNames.length !== 1 ? 's have' : ' has'} recent classes`,
+      'Removed students are hidden from scheduling but keep their history, which is normal for past students. ' +
+      'Classes in the last 30 days suggest the removal may have been a mistake.',
+      recentNames.map(name => {
+        const dates = recentlyActive[name].sort();
+        return { label: name, note: `${dates.length} classes, latest ${dates[dates.length - 1]}` };
+      }));
+  } else {
+    clean.push('No removed student has taught recently');
+  }
+
+  // 3. Students being billed at the default rate
+  const noRate = [...activeStudents].filter(s => !(s in studentRates)).sort();
+  if (noRate.length) {
+    add('warn', `${noRate.length} student${noRate.length !== 1 ? 's have' : ' has'} no rate set`,
+      `Their classes are billed at the default ₹${defaultRate}/hr. If that is not their real rate, ` +
+      'past earnings for them are wrong.',
+      noRate.map(s => ({
+        label: s,
+        note: `${classes.filter(c => c.student === s).length} classes at ₹${defaultRate}/hr`
+      })));
+  } else {
+    clean.push('Every student has a rate set');
+  }
+
+  // 4. Duplicate class records
+  const seenIds = new Set();
+  const duplicates = [];
+  classes.forEach(c => {
+    const id = getClassPaymentId(c);
+    if (seenIds.has(id)) duplicates.push({ label: id, note: 'appears more than once' });
+    seenIds.add(id);
+  });
+  if (duplicates.length) {
+    add('warn', `${duplicates.length} duplicate class record${duplicates.length !== 1 ? 's' : ''}`,
+      'The same student, date and time appears twice. Earnings for these will be counted twice.',
+      duplicates);
+  } else {
+    clean.push('No duplicate classes');
+  }
+
+  // 5. Cancelled classes marked as paid
+  const cancelledPaid = classes
+    .filter(c => c.cancelled && paymentStatus[getClassPaymentId(c)])
+    .map(c => ({ label: `${c.date} ${c.start}-${c.end} ${c.student}`, note: 'cancelled but marked paid' }));
+  if (cancelledPaid.length) {
+    add('warn', `${cancelledPaid.length} cancelled class${cancelledPaid.length !== 1 ? 'es are' : ' is'} marked paid`,
+      'This may be intentional - a late cancellation you still charged for - or a leftover flag.',
+      cancelledPaid);
+  } else {
+    clean.push('No cancelled class is marked paid');
+  }
+
+  // 6. Negative credit balances
+  const negative = Object.keys(advanceCredits)
+    .filter(s => advanceCredits[s] < 0)
+    .map(s => ({ label: s, note: `₹${advanceCredits[s]}` }));
+  if (negative.length) {
+    add('warn', `${negative.length} negative credit balance${negative.length !== 1 ? 's' : ''}`,
+      'A credit balance should never go below zero.', negative);
+  } else {
+    clean.push('No negative credit balances');
+  }
+
+  // 7. Credit held by students with no classes
+  const strandedCredit = Object.keys(advanceCredits)
+    .filter(s => advanceCredits[s] > 0 && !activeStudents.has(s))
+    .map(s => ({ label: s, note: `₹${advanceCredits[s].toLocaleString()} unused` }));
+  if (strandedCredit.length) {
+    add('warn', `${strandedCredit.length} student${strandedCredit.length !== 1 ? 's hold' : ' holds'} credit but has no classes`,
+      'Money paid in advance with nothing scheduled against it.', strandedCredit);
+  } else {
+    clean.push('No stranded advance credit');
+  }
+
+  // 8. Day name disagreeing with the date - the old timezone bug
+  const dayMismatch = classes.filter(c => {
+    if (!c.date || !c.day) return false;
+    const actual = DAYS[(new Date(c.date + 'T12:00:00').getDay() + 6) % 7];
+    return actual !== c.day;
+  }).map(c => ({ label: `${c.date} ${c.student}`, note: `stored as ${c.day}` }));
+  if (dayMismatch.length) {
+    add('warn', `${dayMismatch.length} class${dayMismatch.length !== 1 ? 'es have' : ' has'} a day name that does not match its date`,
+      'The Fix Dates button in this dialog can correct these.', dayMismatch);
+  } else {
+    clean.push('Every day name matches its date');
+  }
+
+  // 9. Malformed dates or times. Shape alone is not enough - "2026-13-99" and
+  // "25:00" both match the pattern while being nonsense, so check the values.
+  const isRealDate = (value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+    const [y, m, d] = value.split('-').map(Number);
+    if (m < 1 || m > 12 || d < 1) return false;
+    return d <= new Date(y, m, 0).getDate();
+  };
+  const isRealTime = (value) => {
+    if (!/^\d{2}:\d{2}$/.test(value || '')) return false;
+    const [h, min] = value.split(':').map(Number);
+    return h >= 0 && h <= 23 && min >= 0 && min <= 59;
+  };
+  const malformed = classes.filter(c =>
+    !isRealDate(c.date) ||
+    !isRealTime(c.start) ||
+    !isRealTime(c.end) ||
+    getMinutesBetween(c.start, c.end) <= 0
+  ).map(c => ({ label: `${c.student} ${c.date}`, note: `${c.start}-${c.end}` }));
+  if (malformed.length) {
+    add('warn', `${malformed.length} class${malformed.length !== 1 ? 'es have' : ' has'} a malformed date or time`,
+      'These may not appear correctly in the schedule or report.', malformed);
+  } else {
+    clean.push('All dates and times are well formed');
+  }
+
+  // 10. Cosmetic leftovers
+  const staleFlags = Object.keys(paymentStatus).filter(k => paymentStatus[k] === false);
+  const dupRemoved = [...new Set(deletedStudents.filter((s, i) => deletedStudents.indexOf(s) !== i))];
+  const orphanNotes = progressNotes.filter(n => n.student && !activeStudents.has(n.student));
+  const cosmetic = [];
+  if (staleFlags.length) {
+    cosmetic.push({ label: `${staleFlags.length} payment flag${staleFlags.length !== 1 ? 's' : ''} set to "not paid"`,
+      note: 'marked then unmarked; treated the same as no record' });
+  }
+  if (dupRemoved.length) {
+    cosmetic.push({ label: `${dupRemoved.length} duplicate name${dupRemoved.length !== 1 ? 's' : ''} in the removed list`,
+      note: dupRemoved.join(', ') });
+  }
+  if (orphanNotes.length) {
+    cosmetic.push({ label: `${orphanNotes.length} progress note${orphanNotes.length !== 1 ? 's' : ''} for students with no classes`,
+      note: orphanNotes.map(n => n.student).join(', ') });
+  }
+  if (cosmetic.length) {
+    add('info', 'Harmless leftovers', 'Nothing is broken by these; listed only for completeness.', cosmetic);
+  }
+
+  return { findings, clean, checkedAt: new Date().toISOString() };
+}
+
+function buildHealthReportText(result) {
+  const lines = [
+    'Mindful Maths - Data Health Check',
+    new Date(result.checkedAt).toLocaleString(),
+    `${classes.length} classes, ${Object.keys(paymentStatus).length} payment records`,
+    ''
+  ];
+  result.findings.forEach(f => {
+    lines.push(`${f.level === 'warn' ? '[CHECK]' : '[INFO] '} ${f.title}`);
+    lines.push(`        ${f.summary}`);
+    f.items.forEach(i => lines.push(`          - ${i.label}${i.note ? '   (' + i.note + ')' : ''}`));
+    lines.push('');
+  });
+  if (result.clean.length) {
+    lines.push('Passed:');
+    result.clean.forEach(c => lines.push(`  OK  ${c}`));
+  }
+  lines.push('', 'Nothing has been changed. Review and correct anything you disagree with yourself.');
+  return lines.join('\n');
+}
+
+function showDataHealthCheck() {
+  const result = runDataHealthCheck();
+  const warnings = result.findings.filter(f => f.level === 'warn').length;
+
+  const findingsHtml = result.findings.length
+    ? result.findings.map(f => `
+        <details class="health-finding ${f.level}">
+          <summary>
+            <span class="health-badge">${f.level === 'warn' ? 'CHECK' : 'INFO'}</span>
+            ${escapeHtml(f.title)}
+          </summary>
+          <p class="health-summary">${escapeHtml(f.summary)}</p>
+          ${f.items.length ? `<ul class="health-items">${
+            f.items.slice(0, 60).map(i =>
+              `<li>${escapeHtml(i.label)}${i.note ? ` <span class="health-note">${escapeHtml(i.note)}</span>` : ''}</li>`
+            ).join('')
+          }</ul>${f.items.length > 60
+            ? `<p class="health-note">…and ${f.items.length - 60} more. Download the report to see them all.</p>`
+            : ''}` : ''}
+        </details>`).join('')
+    : '<p class="health-allclear">✅ Nothing needs your attention.</p>';
+
+  const dialogHtml = `
+    <div class="backup-dialog-content">
+      <h3>🩺 Data Health Check</h3>
+      <p class="health-intro">
+        ${warnings > 0
+          ? `${warnings} thing${warnings !== 1 ? 's' : ''} worth a look. `
+          : 'No problems found. '}
+        <strong>Nothing has been changed.</strong> These are for you to judge and correct yourself.
+      </p>
+
+      ${findingsHtml}
+
+      ${result.clean.length ? `
+        <details class="health-finding pass">
+          <summary><span class="health-badge ok">PASS</span> ${result.clean.length} checks found nothing wrong</summary>
+          <ul class="health-items">${result.clean.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul>
+        </details>` : ''}
+
+      <button class="btn btn-secondary" id="healthDownloadBtn" style="margin-top: 14px;">⬇ Download full report</button>
+      <button class="btn btn-secondary" id="closeHealthBtn">Close</button>
+    </div>`;
+
+  const dialog = document.createElement('div');
+  dialog.id = 'healthDialog';
+  dialog.className = 'modal';
+  dialog.innerHTML = `<div class="modal-content">${dialogHtml}</div>`;
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) dialog.remove();
+  });
+  document.body.appendChild(dialog);
+
+  document.getElementById('closeHealthBtn').addEventListener('click', () => dialog.remove());
+  document.getElementById('healthDownloadBtn').addEventListener('click', () => {
+    const blob = new Blob([buildHealthReportText(result)], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mindful-maths-health-${formatDateToYYYYMMDD(new Date())}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  });
+}
+
 // ==================== EMPTY STATE RECOVERY BANNER ====================
 // An eviction takes localStorage wholesale - the data, every local snapshot,
 // and the cloud passphrase with them. recoverFromCloudIfEmpty() needs that
@@ -6499,6 +6798,12 @@ async function showBackupDialog() {
       </div>
 
       <div class="backup-section">
+        <h4>🩺 Data Health Check</h4>
+        <p>Look for anything odd in your data. Reports only - nothing is changed.</p>
+        <button class="btn btn-secondary" id="healthCheckBtn">Run health check</button>
+      </div>
+
+      <div class="backup-section">
         <h4>🔧 Fix Date Issues</h4>
         <p>Fix classes showing in wrong week due to timezone bug</p>
         <button class="btn btn-secondary" id="fixDatesBtn">Fix Dates Now</button>
@@ -6531,6 +6836,10 @@ async function showBackupDialog() {
     document.getElementById('importFile').click();
   });
   document.getElementById('importFile').addEventListener('change', handleImportFile);
+  document.getElementById('healthCheckBtn')?.addEventListener('click', () => {
+    closeBackupDialog();
+    showDataHealthCheck();
+  });
   document.getElementById('fixDatesBtn').addEventListener('click', () => {
     const fixedCount = forceFixTimezoneShiftedDates();
     if (fixedCount > 0) {
