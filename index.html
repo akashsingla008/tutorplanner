@@ -262,6 +262,20 @@
     <input type="number" id="defaultRate" value="500" min="0" step="50" />
     <span class="rate-hint">Set individual rates in table above</span>
   </div>
+
+  <!-- Students removed from scheduling, with a way back. Removal was
+       previously one-way: deletedStudents was only ever appended to. -->
+  <details class="removed-students-section" id="removedStudentsSection" style="display: none;">
+    <summary>
+      <span class="removed-students-title">👥 Removed from scheduling</span>
+      <span class="removed-students-count" id="removedStudentsCount">0</span>
+    </summary>
+    <p class="removed-students-hint">
+      These students keep every class, payment and note. They simply do not
+      appear when you schedule a new class.
+    </p>
+    <div class="removed-students-list" id="removedStudentsList"></div>
+  </details>
 </main>
 
 <!-- Progress View -->

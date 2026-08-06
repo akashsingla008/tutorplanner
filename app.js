@@ -2266,7 +2266,7 @@ function handleDeleteStudent(student) {
 
   if (confirmed) {
     deletedStudents.push(student);
-    safeSetItem('deletedStudents', JSON.stringify(deletedStudents));
+    saveDeletedStudents();
     updateStudentDropdowns();
     renderReport();
     renderWeekGrid();
@@ -2969,6 +2969,9 @@ function renderReport() {
 
   // Expenses for this period, and the resulting net balance
   updateNetBalance(startDate, endDate, totalAmount, paidAmount);
+
+  // Students hidden from scheduling, with a way back
+  renderRemovedStudents();
 }
 
 // Net = what was billed this period minus what the tutoring cost to deliver.
@@ -5289,6 +5292,85 @@ function initProgressView() {
   });
 }
 
+// ==================== REMOVED STUDENTS ====================
+// Removal used to be one-way: handleDeleteStudent() appended to
+// deletedStudents and nothing ever took a name back out. A student removed by
+// mistake was hidden from scheduling permanently, with no route back.
+//
+// Removal only affects four places - the three student dropdowns and which
+// group a student falls into in the credit summary. Classes, payments, rates,
+// credits and every report ignore the list entirely, so restoring is purely a
+// matter of taking the name out again. Nothing is recreated because nothing
+// was ever removed.
+
+function saveDeletedStudents() {
+  safeSetItem('deletedStudents', JSON.stringify(deletedStudents));
+}
+
+function restoreStudent(name) {
+  if (!deletedStudents.includes(name)) return;
+
+  // Strip every occurrence - the list can hold duplicates, and leaving one
+  // behind would keep the student hidden while the button appeared to work.
+  deletedStudents = deletedStudents.filter(student => student !== name);
+  saveDeletedStudents();
+
+  updateStudentDropdowns();
+  renderWeekGrid();
+  renderReport();
+  showToast(`${name} is back in scheduling.`, 5000);
+}
+
+function renderRemovedStudents() {
+  const section = document.getElementById('removedStudentsSection');
+  const listEl = document.getElementById('removedStudentsList');
+  const countEl = document.getElementById('removedStudentsCount');
+  if (!section || !listEl || !countEl) return;
+
+  const names = [...new Set(deletedStudents)];
+  if (!names.length) {
+    section.style.display = 'none';
+    return;
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const recentCutoff = formatDateToYYYYMMDD(cutoff);
+
+  const rows = names.map(name => {
+    const theirs = classes.filter(c => c.student === name);
+    const dates = theirs.map(c => c.date).filter(Boolean).sort();
+    const last = dates[dates.length - 1] || null;
+    return { name, count: theirs.length, last, recent: Boolean(last && last >= recentCutoff) };
+  });
+
+  // Recently active first - those are the removals most likely to be mistakes
+  rows.sort((a, b) => {
+    if (a.recent !== b.recent) return a.recent ? -1 : 1;
+    return (b.last || '').localeCompare(a.last || '');
+  });
+
+  section.style.display = '';
+  countEl.textContent = names.length;
+
+  listEl.innerHTML = rows.map(row => `
+    <div class="removed-student-row${row.recent ? ' recent' : ''}">
+      <div class="removed-student-info">
+        <span class="removed-student-name">${escapeHtml(row.name)}</span>
+        <span class="removed-student-meta">${
+          row.count
+            ? `${row.count} class${row.count !== 1 ? 'es' : ''}, last ${escapeHtml(row.last)}`
+            : 'no classes recorded'
+        }${row.recent ? ' &middot; <strong>still teaching?</strong>' : ''}</span>
+      </div>
+      <button type="button" class="removed-student-restore" data-student="${escapeHtml(row.name)}">Restore</button>
+    </div>`).join('');
+
+  listEl.querySelectorAll('.removed-student-restore').forEach(btn => {
+    btn.addEventListener('click', () => restoreStudent(btn.dataset.student));
+  });
+}
+
 // ==================== DATA HEALTH CHECK ====================
 // Reports oddities in the stored data and changes nothing. Every finding is
 // something only the tutor can judge - whether a student was removed by
@@ -5370,8 +5452,8 @@ function runDataHealthCheck() {
     add('warn', `${recentNames.length} removed student${recentNames.length !== 1 ? 's have' : ' has'} recent classes`,
       'Removed students are hidden from scheduling but keep their history, which is normal for past students. ' +
       'Classes in the last 30 days suggest the removal may have been a mistake.',
-      'The app cannot undo a removal yet. Their existing classes still count and still appear in reports - ' +
-      'the only effect is that the name is missing from the student dropdown when scheduling a new class.',
+      'Reports tab → Removed from scheduling (at the bottom) → Restore next to their name. ' +
+      'Nothing else changes: their classes, payments and rate were never hidden, only the scheduling dropdown.',
       recentNames.map(name => {
         const dates = recentlyActive[name].sort();
         return { label: name, note: `${dates.length} classes, latest ${dates[dates.length - 1]}` };

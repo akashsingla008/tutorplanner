@@ -6078,3 +6078,106 @@ textarea.share-preview-content:focus {
 .health-fix strong {
   color: #1e3a8a;
 }
+
+/* ==================== REMOVED STUDENTS ==================== */
+
+.removed-students-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  background: #fff;
+}
+
+.removed-students-section > summary {
+  cursor: pointer;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style-position: inside;
+}
+
+.removed-students-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.removed-students-count {
+  background: #e5e7eb;
+  color: #6b7280;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.removed-students-hint {
+  margin: 0 16px 12px;
+  font-size: 0.78rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.removed-students-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.removed-student-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+/* A removal that looks like a mistake deserves to stand out */
+.removed-student-row.recent {
+  background: #fffbeb;
+  border-color: #f59e0b;
+}
+
+.removed-student-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.removed-student-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.removed-student-meta {
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.removed-student-row.recent .removed-student-meta strong {
+  color: #b45309;
+}
+
+.removed-student-restore {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid #3d8fc4;
+  border-radius: 8px;
+  background: #fff;
+  color: #3d8fc4;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.removed-student-restore:active {
+  background: #3d8fc4;
+  color: #fff;
+}
