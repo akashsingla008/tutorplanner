@@ -151,6 +151,15 @@ module.exports = async function handler(request, response) {
     if (url && token) {
       try {
         result.ping = await redis(['PING']);
+
+        // Existence only - deliberately no counts, dates or content. Enough to
+        // answer "did a backup ever land?" without disclosing how much data
+        // there is or when it was last touched. The authenticated verify
+        // endpoint below reports the detail.
+        const stored = await redis(['GET', LATEST_KEY]);
+        result.hasBackup = Boolean(stored);
+        const dayRows = await redis(['LRANGE', DAYS_INDEX, 0, DAILY_RETENTION - 1]);
+        result.daySnapshotCount = (dayRows || []).length;
       } catch (error) {
         result.ping = 'error';
         result.pingError = String(error.message || error).slice(0, 200);
@@ -188,6 +197,42 @@ module.exports = async function handler(request, response) {
           try { return JSON.parse(row); } catch (e) { return null; }
         }).filter(Boolean);
         return response.status(200).json({ history });
+      }
+
+      // Read the stored copy back and describe it, without returning the data
+      // itself. A successful POST only proves the write was accepted; this
+      // proves the backup is actually retrievable and well-formed.
+      if (request.query && request.query.verify) {
+        const raw = await redis(['GET', LATEST_KEY]);
+        if (!raw) {
+          return response.status(404).json({ error: 'no-backup-yet', verified: false });
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(raw);
+        } catch (e) {
+          return response.status(500).json({ error: 'stored-backup-corrupt', verified: false });
+        }
+        const data = parsed.data || {};
+        const dates = (data.classes || []).map(c => c.date).filter(Boolean).sort();
+        const dayRows = await redis(['LRANGE', DAYS_INDEX, 0, DAILY_RETENTION - 1]);
+        const days = (dayRows || []).map(row => {
+          try { return JSON.parse(row).day; } catch (e) { return null; }
+        }).filter(Boolean);
+
+        return response.status(200).json({
+          verified: Array.isArray(data.classes) && data.classes.length > 0,
+          savedAt: parsed.exportDate || null,
+          version: parsed.version || null,
+          bytes: raw.length,
+          classes: Array.isArray(data.classes) ? data.classes.length : 0,
+          expenses: Array.isArray(data.expenses) ? data.expenses.length : 0,
+          students: data.studentRates ? Object.keys(data.studentRates).length : 0,
+          payments: data.paymentStatus ? Object.keys(data.paymentStatus).length : 0,
+          firstClass: dates[0] || null,
+          lastClass: dates[dates.length - 1] || null,
+          daySnapshots: days
+        });
       }
 
       // List the day snapshots available to restore from

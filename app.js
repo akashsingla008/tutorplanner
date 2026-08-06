@@ -5718,6 +5718,63 @@ async function pullFromCloud(interactive, day) {
   }
 }
 
+// Read the stored copy back and report what is actually there. A push
+// returning 200 only proves the server accepted the write; this proves the
+// backup can be retrieved and parsed - which is the thing worth knowing.
+async function verifyCloudBackup() {
+  if (!isSyncEnabled()) {
+    showToast('Cloud backup is not set up yet.', 5000);
+    return null;
+  }
+  try {
+    const response = await fetch(`${SYNC_ENDPOINT}?verify=1`, {
+      headers: { 'x-mm-token': getSyncToken() }
+    });
+
+    if (response.status === 404) {
+      alert([
+        'No backup found in the cloud yet.',
+        '',
+        'Nothing has been stored. If the app was empty when cloud backup was',
+        'switched on, no copy was sent - an empty dataset is deliberately',
+        'refused so a wiped device cannot overwrite a good backup.',
+        '',
+        'Import your data first, then tap "Back up now".'
+      ].join('\n'));
+      return null;
+    }
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      alert('Could not verify: ' + (detail.error || response.status));
+      return null;
+    }
+
+    const info = await response.json();
+    const savedAt = info.savedAt ? new Date(info.savedAt).toLocaleString() : 'unknown';
+    const sizeKb = (info.bytes / 1024).toFixed(0);
+    const range = info.firstClass ? `${info.firstClass} to ${info.lastClass}` : 'none';
+
+    const lines = [
+      info.verified ? '✅ Cloud backup verified' : '⚠️ A backup exists but holds no classes',
+      '',
+      `Saved: ${savedAt}`,
+      `Classes: ${info.classes} (${range})`,
+      `Students: ${info.students}`,
+      `Payments: ${info.payments}`,
+      `Expenses: ${info.expenses}`,
+      `Size: ${sizeKb} KB`,
+      `Daily snapshots: ${info.daySnapshots.length}`
+    ];
+    info.daySnapshots.forEach(day => lines.push('   ' + day));
+    alert(lines.join('\n'));
+    return info;
+  } catch (error) {
+    console.warn('verifyCloudBackup failed', error);
+    alert('Could not reach the cloud backup. Check your connection.');
+    return null;
+  }
+}
+
 // The last few days kept server-side, newest first.
 async function fetchCloudDays() {
   if (!isSyncEnabled()) return [];
@@ -6345,6 +6402,7 @@ async function showBackupDialog() {
         <button class="btn btn-secondary" id="saveSyncTokenBtn">${syncOn ? 'Update passphrase' : 'Enable cloud backup'}</button>
         ${syncOn ? `
         <button class="btn btn-primary" id="cloudPushBtn">Back up now</button>
+        <button class="btn btn-secondary" id="cloudVerifyBtn">🔍 Verify what is stored</button>
         <button class="btn btn-secondary" id="cloudPullBtn">Restore latest</button>
         ${cloudDays.length ? `
         <div class="cloud-days">
@@ -6454,6 +6512,7 @@ async function showBackupDialog() {
     showBackupDialog();
   });
   document.getElementById('cloudPushBtn')?.addEventListener('click', () => pushToCloud(true));
+  document.getElementById('cloudVerifyBtn')?.addEventListener('click', verifyCloudBackup);
   document.getElementById('cloudPullBtn')?.addEventListener('click', async () => {
     await pullFromCloud(true);
     closeBackupDialog();
