@@ -54,6 +54,30 @@
 
 <!-- Main Schedule View -->
 <main id="schedule-view" class="view active">
+
+  <!-- Shown when the app has no classes at all. After a browser eviction every
+       local trace is gone, including the cloud passphrase, so nothing would
+       otherwise tell the tutor that a recoverable copy exists. -->
+  <div id="emptyStateBanner" class="empty-state-banner hidden">
+    <div class="esb-icon">⚠️</div>
+    <h3>No classes on this device</h3>
+    <p class="esb-message" id="esbMessage"></p>
+
+    <div class="esb-cloud" id="esbCloudBlock">
+      <input type="password" id="esbPassphrase" class="esb-input"
+             placeholder="Cloud backup passphrase" autocomplete="off" />
+      <button type="button" class="btn btn-primary esb-btn" id="esbRestoreBtn">
+        ☁️ Restore from cloud
+      </button>
+    </div>
+
+    <input type="file" id="esbImportFile" accept=".json" style="display: none" />
+    <button type="button" class="btn btn-secondary esb-btn" id="esbImportBtn">
+      📤 Import a backup file
+    </button>
+    <button type="button" class="esb-dismiss" id="esbDismissBtn">Dismiss for now</button>
+  </div>
+
   <div class="week-header">
     <button id="prevWeek" class="nav-btn">◀</button>
     <span id="weekLabel">This Week</span>

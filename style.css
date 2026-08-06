@@ -5886,3 +5886,70 @@ textarea.share-preview-content:focus {
 #backupPromptLaterBtn {
   width: 100%;
 }
+
+/* ==================== EMPTY STATE RECOVERY BANNER ==================== */
+
+.empty-state-banner {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border: 1px solid #f87171;
+  border-left: 4px solid #dc2626;
+  border-radius: 12px;
+  padding: 18px 16px;
+  margin: 12px;
+  text-align: center;
+}
+
+.empty-state-banner .esb-icon {
+  font-size: 1.9rem;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.empty-state-banner h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  color: #991b1b;
+}
+
+.esb-message {
+  margin: 0 0 14px;
+  font-size: 0.85rem;
+  color: #7f1d1d;
+  line-height: 1.5;
+}
+
+.esb-cloud {
+  margin-bottom: 8px;
+}
+
+.esb-input {
+  width: 100%;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #fff;
+}
+
+.esb-input:focus {
+  outline: none;
+  border-color: #dc2626;
+}
+
+.esb-btn {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.esb-dismiss {
+  background: none;
+  border: 0;
+  color: #9ca3af;
+  font-size: 0.78rem;
+  font-family: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px;
+}

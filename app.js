@@ -172,6 +172,7 @@ function init() {
   initProgressView();
   updateBackupIndicator();
   maybeShowBackupPrompt();
+  updateEmptyStateBanner();
 }
 
 // Apply a snapshot into the live globals and persist it.
@@ -735,6 +736,17 @@ function setupEventListeners() {
   document.getElementById("notificationBtn").addEventListener("click", toggleNotifications);
   document.getElementById("backupBtn").addEventListener("click", showBackupDialog);
 
+  // Empty-state recovery banner
+  document.getElementById("esbRestoreBtn")?.addEventListener("click", handleEmptyStateRestore);
+  document.getElementById("esbImportBtn")?.addEventListener("click", () => {
+    document.getElementById("esbImportFile")?.click();
+  });
+  document.getElementById("esbImportFile")?.addEventListener("change", handleImportFile);
+  document.getElementById("esbDismissBtn")?.addEventListener("click", () => {
+    emptyStateDismissed = true;
+    updateEmptyStateBanner();
+  });
+
   // Daily backup prompt
   document.getElementById("backupPromptNowBtn")?.addEventListener("click", handleBackupPromptNow);
   document.getElementById("backupPromptLaterBtn")?.addEventListener("click", closeBackupPrompt);
@@ -1048,6 +1060,7 @@ function showCopyClassDialog(classIndex) {
 
 // Render Week Grid with Drag and Drop
 function renderWeekGrid() {
+  updateEmptyStateBanner();
   weekGrid.innerHTML = "";
   const weekStart = getWeekStartDate(currentWeekOffset);
 
@@ -5276,6 +5289,77 @@ function initProgressView() {
   });
 }
 
+// ==================== EMPTY STATE RECOVERY BANNER ====================
+// An eviction takes localStorage wholesale - the data, every local snapshot,
+// and the cloud passphrase with them. recoverFromCloudIfEmpty() needs that
+// passphrase, so after an eviction it silently does nothing and the app opens
+// to a blank schedule with no hint that a cloud copy is sitting there.
+//
+// This banner is what turns that silence into instructions.
+
+let emptyStateDismissed = false; // session only - returns on the next launch
+
+function updateEmptyStateBanner() {
+  const banner = document.getElementById('emptyStateBanner');
+  if (!banner) return;
+
+  if (classes.length > 0 || emptyStateDismissed) {
+    banner.classList.add('hidden');
+    return;
+  }
+
+  const messageEl = document.getElementById('esbMessage');
+  const cloudBlock = document.getElementById('esbCloudBlock');
+  const passphraseEl = document.getElementById('esbPassphrase');
+  const restoreBtn = document.getElementById('esbRestoreBtn');
+
+  if (isSyncEnabled()) {
+    // Token survived, so auto-recovery already ran and did not help - either
+    // the network was down or the cloud holds nothing yet.
+    messageEl.textContent = 'Cloud backup is switched on but nothing was restored. ' +
+      'You may be offline, or no backup has been saved yet. Try again:';
+    if (passphraseEl) passphraseEl.style.display = 'none';
+    if (restoreBtn) restoreBtn.textContent = '☁️ Retry cloud restore';
+  } else {
+    messageEl.textContent = 'If you have used this app before, your data is not lost. ' +
+      'Enter your cloud backup passphrase to bring it back, or import a backup file.';
+    if (passphraseEl) passphraseEl.style.display = '';
+    if (restoreBtn) restoreBtn.textContent = '☁️ Restore from cloud';
+  }
+
+  if (cloudBlock) cloudBlock.style.display = '';
+  banner.classList.remove('hidden');
+}
+
+async function handleEmptyStateRestore() {
+  const passphraseEl = document.getElementById('esbPassphrase');
+
+  // Only set a token if one was actually typed; when sync is already on this
+  // is a plain retry.
+  if (!isSyncEnabled()) {
+    const typed = passphraseEl ? passphraseEl.value.trim() : '';
+    if (!typed) {
+      showToast('Enter your cloud backup passphrase first.', 5000);
+      return;
+    }
+    setSyncToken(typed);
+  }
+
+  const result = await pullFromCloud(true);
+  if (result.ok) {
+    updateEmptyStateBanner();
+    return;
+  }
+
+  // A rejected passphrase must not be left behind, or the banner would switch
+  // to "retry" mode and hide the input the tutor needs.
+  if (result.reason === 'unauthorized' || result.reason === '401') {
+    setSyncToken('');
+    showToast('That passphrase was not accepted. Check it and try again.', 8000);
+    updateEmptyStateBanner();
+  }
+}
+
 // ==================== DAILY BACKUP HABIT ====================
 // A nightly local copy is the one safeguard that survives everything else -
 // it lives outside the browser entirely, so neither eviction nor a lost phone
@@ -5437,8 +5521,50 @@ const SYNCED_KEYS = new Set([
 let syncTimer = null;
 let syncInFlight = false;
 
+// The passphrase is also mirrored into a cookie. Chrome's quota eviction
+// clears the origin's storage bucket (localStorage, IndexedDB, CacheStorage);
+// cookies are managed under a separate lifetime system, so a cookie copy may
+// survive an eviction that wipes localStorage - which would let cloud recovery
+// run unaided instead of waiting for the passphrase to be retyped.
+//
+// Treated strictly as a bonus, never as the source of truth: "clear site data"
+// removes cookies too, and this behaviour is not guaranteed across browsers.
+// The empty-state banner remains the reliable path.
+const SYNC_COOKIE = 'mm_sync';
+
+function readSyncCookie() {
+  try {
+    const match = document.cookie.split('; ').find(row => row.startsWith(SYNC_COOKIE + '='));
+    return match ? decodeURIComponent(match.slice(SYNC_COOKIE.length + 1)) : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function writeSyncCookie(token) {
+  try {
+    const base = `${SYNC_COOKIE}=${encodeURIComponent(token || '')}; path=/; SameSite=Strict`;
+    const secure = location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = token
+      ? `${base}; max-age=${60 * 60 * 24 * 730}${secure}`   // ~2 years
+      : `${base}; max-age=0${secure}`;
+  } catch (e) {
+    /* cookies disabled - the banner still covers recovery */
+  }
+}
+
 function getSyncToken() {
-  return localStorage.getItem('syncToken') || '';
+  const stored = localStorage.getItem('syncToken');
+  if (stored) return stored;
+
+  // localStorage lost but the cookie survived: restore it and carry on.
+  const fromCookie = readSyncCookie();
+  if (fromCookie) {
+    safeSetItem('syncToken', fromCookie);
+    console.warn('Sync passphrase recovered from cookie after storage loss.');
+    return fromCookie;
+  }
+  return '';
 }
 
 function setSyncToken(token) {
@@ -5447,6 +5573,7 @@ function setSyncToken(token) {
   } else {
     localStorage.removeItem('syncToken');
   }
+  writeSyncCookie(token);
 }
 
 function isSyncEnabled() {
