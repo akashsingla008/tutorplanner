@@ -6063,3 +6063,18 @@ textarea.share-preview-content:focus {
   font-size: 0.95rem;
   color: #16a34a;
 }
+
+.health-fix {
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  color: #1e40af;
+  background: #eff6ff;
+  border-left: 3px solid #3d8fc4;
+  border-radius: 0 6px 6px 0;
+  line-height: 1.5;
+}
+
+.health-fix strong {
+  color: #1e3a8a;
+}

@@ -5313,8 +5313,11 @@ function parsePaymentKey(key) {
 function runDataHealthCheck() {
   const findings = [];
   const clean = [];
-  const add = (level, title, summary, items) =>
-    findings.push({ level, title, summary, items: items || [] });
+  // Every finding carries a `fix`: what the tutor can actually do about it,
+  // including saying plainly when the answer is "nothing, and that is fine".
+  // Reporting a problem without a route to act on it is worse than silence.
+  const add = (level, title, summary, fix, items) =>
+    findings.push({ level, title, summary, fix, items: items || [] });
 
   const classIds = new Set(classes.map(getClassPaymentId));
   const activeStudents = new Set(classes.map(c => c.student));
@@ -5347,6 +5350,8 @@ function runDataHealthCheck() {
     add('warn', `${orphans.length} payment records with no matching class`,
       `${months}. Roughly ₹${value.toLocaleString()} of billed classes. ` +
       `These are usually classes removed by the old 3-month cleanup - the payment survived, the lesson record did not.`,
+      'Nothing needs doing. They are never displayed and never counted - totals only look up payments for classes that still exist. ' +
+      'Each key does still hold the student, date and time, so the missing class records could be rebuilt from them if you want that history back.',
       rows);
   } else {
     clean.push('Every payment record matches a class');
@@ -5365,6 +5370,8 @@ function runDataHealthCheck() {
     add('warn', `${recentNames.length} removed student${recentNames.length !== 1 ? 's have' : ' has'} recent classes`,
       'Removed students are hidden from scheduling but keep their history, which is normal for past students. ' +
       'Classes in the last 30 days suggest the removal may have been a mistake.',
+      'The app cannot undo a removal yet. Their existing classes still count and still appear in reports - ' +
+      'the only effect is that the name is missing from the student dropdown when scheduling a new class.',
       recentNames.map(name => {
         const dates = recentlyActive[name].sort();
         return { label: name, note: `${dates.length} classes, latest ${dates[dates.length - 1]}` };
@@ -5379,6 +5386,8 @@ function runDataHealthCheck() {
     add('warn', `${noRate.length} student${noRate.length !== 1 ? 's have' : ' has'} no rate set`,
       `Their classes are billed at the default ₹${defaultRate}/hr. If that is not their real rate, ` +
       'past earnings for them are wrong.',
+      'Reports tab → Classes by Student → type the correct figure in the Rate (₹/hr) column for that student. ' +
+      'Earnings recalculate immediately, including for past classes.',
       noRate.map(s => ({
         label: s,
         note: `${classes.filter(c => c.student === s).length} classes at ₹${defaultRate}/hr`
@@ -5398,6 +5407,7 @@ function runDataHealthCheck() {
   if (duplicates.length) {
     add('warn', `${duplicates.length} duplicate class record${duplicates.length !== 1 ? 's' : ''}`,
       'The same student, date and time appears twice. Earnings for these will be counted twice.',
+      'Schedule tab → go to that date → tap the duplicate → Delete.',
       duplicates);
   } else {
     clean.push('No duplicate classes');
@@ -5410,6 +5420,7 @@ function runDataHealthCheck() {
   if (cancelledPaid.length) {
     add('warn', `${cancelledPaid.length} cancelled class${cancelledPaid.length !== 1 ? 'es are' : ' is'} marked paid`,
       'This may be intentional - a late cancellation you still charged for - or a leftover flag.',
+      'If you did charge for it, leave it. If not, Reports tab → Classes by Student → expand that student → change the payment on that class.',
       cancelledPaid);
   } else {
     clean.push('No cancelled class is marked paid');
@@ -5421,7 +5432,9 @@ function runDataHealthCheck() {
     .map(s => ({ label: s, note: `₹${advanceCredits[s]}` }));
   if (negative.length) {
     add('warn', `${negative.length} negative credit balance${negative.length !== 1 ? 's' : ''}`,
-      'A credit balance should never go below zero.', negative);
+      'A credit balance should never go below zero.',
+      'Reports tab → Advance Credit Summary → Edit next to that student → set the correct balance.',
+      negative);
   } else {
     clean.push('No negative credit balances');
   }
@@ -5432,7 +5445,9 @@ function runDataHealthCheck() {
     .map(s => ({ label: s, note: `₹${advanceCredits[s].toLocaleString()} unused` }));
   if (strandedCredit.length) {
     add('warn', `${strandedCredit.length} student${strandedCredit.length !== 1 ? 's hold' : ' holds'} credit but has no classes`,
-      'Money paid in advance with nothing scheduled against it.', strandedCredit);
+      'Money paid in advance with nothing scheduled against it.',
+      'Either schedule the classes it was paid for, or Reports tab → Advance Credit Summary → Edit to clear it if it was refunded.',
+      strandedCredit);
   } else {
     clean.push('No stranded advance credit');
   }
@@ -5445,7 +5460,9 @@ function runDataHealthCheck() {
   }).map(c => ({ label: `${c.date} ${c.student}`, note: `stored as ${c.day}` }));
   if (dayMismatch.length) {
     add('warn', `${dayMismatch.length} class${dayMismatch.length !== 1 ? 'es have' : ' has'} a day name that does not match its date`,
-      'The Fix Dates button in this dialog can correct these.', dayMismatch);
+      'A class shows in the wrong week when this happens.',
+      'Backup & Restore → Fix Dates Now. It corrects all of them in one go.',
+      dayMismatch);
   } else {
     clean.push('Every day name matches its date');
   }
@@ -5471,7 +5488,9 @@ function runDataHealthCheck() {
   ).map(c => ({ label: `${c.student} ${c.date}`, note: `${c.start}-${c.end}` }));
   if (malformed.length) {
     add('warn', `${malformed.length} class${malformed.length !== 1 ? 'es have' : ' has'} a malformed date or time`,
-      'These may not appear correctly in the schedule or report.', malformed);
+      'These may not appear correctly in the schedule or report.',
+      'Schedule tab → find the class → tap it → re-enter the date and times, or Delete it and add it again.',
+      malformed);
   } else {
     clean.push('All dates and times are well formed');
   }
@@ -5494,7 +5513,10 @@ function runDataHealthCheck() {
       note: orphanNotes.map(n => n.student).join(', ') });
   }
   if (cosmetic.length) {
-    add('info', 'Harmless leftovers', 'Nothing is broken by these; listed only for completeness.', cosmetic);
+    add('info', 'Harmless leftovers', 'Nothing is broken by these; listed only for completeness.',
+      'No action needed. A payment flag set to "not paid" behaves exactly like no record at all, ' +
+      'and duplicate names in the removed list are ignored.',
+      cosmetic);
   }
 
   return { findings, clean, checkedAt: new Date().toISOString() };
@@ -5510,6 +5532,7 @@ function buildHealthReportText(result) {
   result.findings.forEach(f => {
     lines.push(`${f.level === 'warn' ? '[CHECK]' : '[INFO] '} ${f.title}`);
     lines.push(`        ${f.summary}`);
+    if (f.fix) lines.push(`        WHAT TO DO: ${f.fix}`);
     f.items.forEach(i => lines.push(`          - ${i.label}${i.note ? '   (' + i.note + ')' : ''}`));
     lines.push('');
   });
@@ -5533,6 +5556,7 @@ function showDataHealthCheck() {
             ${escapeHtml(f.title)}
           </summary>
           <p class="health-summary">${escapeHtml(f.summary)}</p>
+          ${f.fix ? `<p class="health-fix"><strong>What to do:</strong> ${escapeHtml(f.fix)}</p>` : ''}
           ${f.items.length ? `<ul class="health-items">${
             f.items.slice(0, 60).map(i =>
               `<li>${escapeHtml(i.label)}${i.note ? ` <span class="health-note">${escapeHtml(i.note)}</span>` : ''}</li>`
