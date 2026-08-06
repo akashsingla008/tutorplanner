@@ -5782,3 +5782,107 @@ textarea.share-preview-content:focus {
 .earnings-net .net-income strong {
   color: #16a34a;
 }
+
+/* ==================== DAILY BACKUP PROMPT ==================== */
+
+/* Dot on the header button: the reminder persists after the prompt is
+   dismissed, so the nudge does not disappear until tomorrow. */
+.backup-due-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid #3d8fc4;
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+  animation: backupDuePulse 2.2s infinite;
+}
+
+#backupBtn {
+  position: relative;
+}
+
+@keyframes backupDuePulse {
+  0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+  70%  { box-shadow: 0 0 0 7px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backup-due-dot { animation: none; }
+}
+
+#backupPromptModal {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#backupPromptModal.show {
+  opacity: 1;
+}
+
+.backup-prompt-content {
+  max-width: 340px;
+  text-align: center;
+  padding: 24px 20px 20px;
+}
+
+.backup-prompt-icon {
+  font-size: 2.6rem;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+
+.backup-prompt-content h2 {
+  font-size: 1.15rem;
+  margin: 0 0 6px;
+  color: #111827;
+}
+
+.backup-prompt-sub {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.backup-streak-box {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fdba74;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.backup-streak-value {
+  font-size: 1.9rem;
+  font-weight: 800;
+  color: #c2410c;
+  line-height: 1;
+}
+
+.backup-streak-label {
+  font-size: 0.75rem;
+  color: #9a3412;
+  margin-top: 2px;
+}
+
+.backup-prompt-cloud {
+  font-size: 0.75rem;
+  color: #16a34a;
+  margin: 0 0 14px;
+  line-height: 1.4;
+}
+
+.backup-prompt-cta {
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 1rem;
+  padding: 14px;
+}
+
+#backupPromptLaterBtn {
+  width: 100%;
+}

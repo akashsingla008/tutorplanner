@@ -170,6 +170,8 @@ function init() {
   startEndOfDayReminderCheck();
   initCelebrations();
   initProgressView();
+  updateBackupIndicator();
+  maybeShowBackupPrompt();
 }
 
 // Apply a snapshot into the live globals and persist it.
@@ -732,6 +734,13 @@ function setupEventListeners() {
   // Header button event listeners (CSP-compliant - no inline onclick)
   document.getElementById("notificationBtn").addEventListener("click", toggleNotifications);
   document.getElementById("backupBtn").addEventListener("click", showBackupDialog);
+
+  // Daily backup prompt
+  document.getElementById("backupPromptNowBtn")?.addEventListener("click", handleBackupPromptNow);
+  document.getElementById("backupPromptLaterBtn")?.addEventListener("click", closeBackupPrompt);
+  document.getElementById("backupPromptModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "backupPromptModal") closeBackupPrompt();
+  });
 
   // Expenses
   document.getElementById("addExpenseBtn")?.addEventListener("click", () => openExpenseModal(null));
@@ -5267,6 +5276,148 @@ function initProgressView() {
   });
 }
 
+// ==================== DAILY BACKUP HABIT ====================
+// A nightly local copy is the one safeguard that survives everything else -
+// it lives outside the browser entirely, so neither eviction nor a lost phone
+// touches it. The prompt exists to turn that into a habit rather than
+// something remembered only after a loss.
+//
+// State lives inside `achievements` rather than its own localStorage key, so
+// it is automatically carried by every backup path and needs no new wiring.
+
+function getBackupStreakState() {
+  return {
+    last: achievements.lastLocalBackup || null,
+    streak: achievements.backupStreak || 0
+  };
+}
+
+function getDaysSinceBackup() {
+  const { last } = getBackupStreakState();
+  if (!last) return null;
+  const lastDate = new Date(last + 'T00:00:00');
+  const today = new Date(formatDateToYYYYMMDD(new Date()) + 'T00:00:00');
+  return Math.round((today - lastDate) / 86400000);
+}
+
+function isBackupDoneToday() {
+  return getBackupStreakState().last === formatDateToYYYYMMDD(new Date());
+}
+
+// What the streak WOULD become if a backup were taken now, without committing
+// it. The exported file embeds this so the copy records the backup it is,
+// while the local commit waits until the download has actually been handed off.
+function projectBackupStreak() {
+  const today = formatDateToYYYYMMDD(new Date());
+  const { last, streak } = getBackupStreakState();
+
+  if (last === today) return { lastLocalBackup: today, backupStreak: streak };
+  if (!last) return { lastLocalBackup: today, backupStreak: 1 };
+
+  const gap = Math.round(
+    (new Date(today + 'T00:00:00') - new Date(last + 'T00:00:00')) / 86400000
+  );
+  return { lastLocalBackup: today, backupStreak: gap === 1 ? streak + 1 : 1 };
+}
+
+// Commit the backup. Consecutive days build the streak; a missed day resets it,
+// exactly like the class streak. Called only once the file has been handed to
+// the browser - recording it earlier would let a failed download suppress
+// tomorrow's reminder and leave a false sense of safety.
+function recordLocalBackup() {
+  const projected = projectBackupStreak();
+  if (achievements.lastLocalBackup === projected.lastLocalBackup) return;
+
+  achievements.lastLocalBackup = projected.lastLocalBackup;
+  achievements.backupStreak = projected.backupStreak;
+  saveAchievements();
+  updateBackupIndicator();
+}
+
+// A dot on the header button, so the reminder persists after the prompt is
+// dismissed instead of vanishing until tomorrow.
+function updateBackupIndicator() {
+  const dot = document.getElementById('backupDueDot');
+  const btn = document.getElementById('backupBtn');
+  const due = !isBackupDoneToday() && classes.length > 0;
+  if (dot) dot.style.display = due ? 'block' : 'none';
+  if (btn) btn.classList.toggle('backup-due', due);
+}
+
+function maybeShowBackupPrompt() {
+  // Nothing to back up yet, so nothing to nag about
+  if (!classes.length) return;
+  if (isBackupDoneToday()) return;
+
+  const today = formatDateToYYYYMMDD(new Date());
+  // Once a day at most, even if dismissed
+  if (localStorage.getItem('backupPromptShown') === today) return;
+
+  safeSetItem('backupPromptShown', today);
+  // Let the schedule paint first; an instant modal on launch feels like a crash
+  setTimeout(showBackupPrompt, 1200);
+}
+
+function showBackupPrompt() {
+  const modal = document.getElementById('backupPromptModal');
+  if (!modal) return;
+
+  const { streak } = getBackupStreakState();
+  const days = getDaysSinceBackup();
+
+  const titleEl = document.getElementById('backupPromptTitle');
+  const subEl = document.getElementById('backupPromptSub');
+  const streakEl = document.getElementById('backupStreakValue');
+  const streakLabelEl = document.getElementById('backupStreakLabel');
+  const cloudEl = document.getElementById('backupPromptCloud');
+
+  if (days === null) {
+    titleEl.textContent = 'Take your first backup';
+    subEl.textContent = `You have ${classes.length} classes saved. A downloaded copy lives outside the browser, where nothing can clear it.`;
+  } else if (days >= 7) {
+    titleEl.textContent = `${days} days since your last backup`;
+    subEl.textContent = 'That is a long gap. A fresh copy takes one tap.';
+  } else if (days > 1) {
+    titleEl.textContent = `Last backup was ${days} days ago`;
+    subEl.textContent = 'Keep a copy on your phone so nothing can be lost.';
+  } else {
+    titleEl.textContent = "Time for today's backup";
+    subEl.textContent = 'Keep a copy on your phone so nothing can be lost.';
+  }
+
+  streakEl.textContent = streak;
+  streakLabelEl.textContent = streak === 1 ? 'day backup streak' : 'day backup streak';
+
+  // Cloud is a different safety net, not a substitute - say where it stands
+  // rather than letting the prompt imply nothing is protected.
+  if (cloudEl) {
+    if (isSyncEnabled()) {
+      const lastSync = getLastSyncedAt();
+      cloudEl.textContent = lastSync
+        ? `☁️ Cloud backup is on — last synced ${new Date(lastSync).toLocaleString()}`
+        : '☁️ Cloud backup is on';
+      cloudEl.style.display = '';
+    } else {
+      cloudEl.style.display = 'none';
+    }
+  }
+
+  modal.classList.remove('hidden');
+  setTimeout(() => modal.classList.add('show'), 10);
+}
+
+function closeBackupPrompt() {
+  const modal = document.getElementById('backupPromptModal');
+  if (!modal) return;
+  modal.classList.remove('show');
+  setTimeout(() => modal.classList.add('hidden'), 200);
+}
+
+function handleBackupPromptNow() {
+  closeBackupPrompt();
+  exportData();
+}
+
 // ==================== CLOUD SYNC ====================
 // An off-device copy, because every on-device backup shares one storage bucket
 // with the live data and dies with it when the browser evicts the origin.
@@ -5886,6 +6037,7 @@ function createAutoBackup() {
 
 // Export data to JSON file
 function exportData() {
+  const previousStreak = getBackupStreakState().streak;
   const exportData = {
     exportDate: new Date().toISOString(),
     version: '7.0', // v7.0: Added expenses tracking
@@ -5898,7 +6050,8 @@ function exportData() {
       deletedStudents: deletedStudents,
       expenses: expenses,
       defaultRate: defaultRate,
-      achievements: achievements
+      // Embed the streak this export earns, so the file is a record of itself
+      achievements: Object.assign({}, achievements, projectBackupStreak())
     }
   };
 
@@ -5912,7 +6065,15 @@ function exportData() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
-  showToast('Backup downloaded successfully!');
+  // Only now is the backup real
+  recordLocalBackup();
+
+  const streak = getBackupStreakState().streak;
+  if (streak > previousStreak && streak > 1) {
+    showToast(`Backup saved — ${streak} day streak! 🔥`, 6000);
+  } else {
+    showToast('Backup downloaded successfully!', 5000);
+  }
 }
 
 // Import data from JSON file
@@ -6545,76 +6706,11 @@ function checkEndOfDayReminder() {
   // Update task badge periodically
   updateTaskBadge();
 
-  // Check for weekly backup reminder
-  checkBackupReminder();
+  // Daily backup prompt replaces the old weekly toast - two reminders for the
+  // same thing is nagging, and weekly was too slack given what happened.
+  maybeShowBackupPrompt();
 }
 
-// Check if backup reminder should be shown (weekly)
-function checkBackupReminder() {
-  const lastExportReminder = localStorage.getItem('lastExportReminder');
-  const now = new Date();
-  const todayKey = formatDateToYYYYMMDD(now);
-
-  // Only show once per day and if 7+ days since last reminder
-  if (lastExportReminder) {
-    const lastDate = new Date(lastExportReminder);
-    const daysSinceReminder = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
-    if (daysSinceReminder < 7) return;
-  }
-
-  // Check storage usage - remind if over 50% or if it's been a week
-  const storagePercent = getStoragePercentage();
-  const shouldRemind = storagePercent > 50 || !lastExportReminder;
-
-  if (shouldRemind) {
-    showBackupReminderToast();
-    localStorage.setItem('lastExportReminder', todayKey);
-  }
-}
-
-// Show backup reminder toast
-function showBackupReminderToast() {
-  const storagePercent = getStoragePercentage();
-  const message = storagePercent > 70
-    ? `⚠️ Storage is ${storagePercent.toFixed(0)}% full!`
-    : `📅 Weekly backup reminder`;
-
-  const toast = document.createElement('div');
-  toast.className = 'backup-reminder-toast';
-  toast.innerHTML = `
-    <div class="backup-reminder-content">
-      <span class="backup-reminder-icon">💾</span>
-      <div class="backup-reminder-text">
-        <strong>${message}</strong>
-        <p>Export your data to keep it safe</p>
-      </div>
-      <button class="backup-reminder-btn">Backup Now</button>
-      <button class="backup-reminder-close">✕</button>
-    </div>
-  `;
-
-  document.body.appendChild(toast);
-  setTimeout(() => toast.classList.add('show'), 10);
-
-  toast.querySelector('.backup-reminder-btn').addEventListener('click', () => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 300);
-    showBackupDialog();
-  });
-
-  toast.querySelector('.backup-reminder-close').addEventListener('click', () => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 300);
-  });
-
-  // Auto-dismiss after 30 seconds
-  setTimeout(() => {
-    if (toast.parentElement) {
-      toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
-    }
-  }, 30000);
-}
 
 // Test function - call testEndOfDayReminder() from console to test
 function testEndOfDayReminder() {

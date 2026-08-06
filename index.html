@@ -40,6 +40,7 @@
         <polyline points="7 10 12 15 17 10"/>
         <line x1="12" y1="15" x2="12" y2="3"/>
       </svg>
+      <span class="backup-due-dot" id="backupDueDot" style="display: none;"></span>
     </button>
   </div>
 </header>
@@ -623,6 +624,27 @@
 </div>
 
 <!-- Achievement Popup -->
+<!-- Daily backup prompt, shown on open when today's backup hasn't been taken -->
+<div id="backupPromptModal" class="modal hidden">
+  <div class="modal-content backup-prompt-content">
+    <div class="backup-prompt-icon">💾</div>
+    <h2 id="backupPromptTitle">Time for today's backup</h2>
+    <p class="backup-prompt-sub" id="backupPromptSub">Keep a copy on your phone so nothing can be lost.</p>
+
+    <div class="backup-streak-box">
+      <div class="backup-streak-value" id="backupStreakValue">0</div>
+      <div class="backup-streak-label" id="backupStreakLabel">day backup streak</div>
+    </div>
+
+    <p class="backup-prompt-cloud" id="backupPromptCloud"></p>
+
+    <button class="btn btn-primary backup-prompt-cta" id="backupPromptNowBtn">
+      ⬇ Download backup now
+    </button>
+    <button class="btn btn-secondary" id="backupPromptLaterBtn">Remind me tomorrow</button>
+  </div>
+</div>
+
 <div id="achievementPopup" class="achievement-popup hidden">
   <div class="achievement-content">
     <span class="achievement-icon" id="achievementIcon">🏆</span>
